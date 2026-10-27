@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gestión documental con IA</title>
+<style>
+:root{--bg:#eef0ec;--card:#fff;--ink:#1d2b2a;--mu:#68766f;--pr:#0f6b63;--prd:#0b4f49;--ok:#1d7f4f;--wa:#b36b00;--er:#b8322a;--bd:#d9ddd5}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+h1,h2,h3{font-family:Georgia,"Times New Roman",serif;font-weight:700;margin:0 0 .5rem}
+h2{font-size:1.5rem}h3{font-size:1.1rem}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--bd);background:#fff;border-radius:6px;padding:.4rem .8rem}
+button:hover{border-color:var(--pr)}
+button.pr{background:var(--pr);border-color:var(--pr);color:#fff}button.pr:hover{background:var(--prd)}
+button.dg{color:var(--er)}button.ln{border:0;background:none;color:var(--pr);padding:.3rem}
+:focus-visible{outline:2px solid var(--pr);outline-offset:2px}
+input,select{border:1px solid var(--bd);border-radius:6px;padding:.45rem .6rem;background:#fff;width:100%}
+label{display:block;margin:.7rem 0;font-weight:600}label input{margin-top:.25rem;font-weight:400}
+.mu{color:var(--mu)}.err-t{color:var(--er)}
+#login{min-height:100vh;display:grid;place-items:center;padding:1rem}
+#lf{width:100%;max-width:380px;background:var(--card);padding:2rem;border-radius:10px;border:1px solid var(--bd)}
+#lf button{width:100%;margin-top:.5rem}
+#app{display:grid;grid-template-columns:210px 1fr;min-height:100vh}
+aside{background:var(--ink);color:#e8efe9;padding:1.2rem 1rem;display:flex;flex-direction:column;gap:.25rem}
+aside h1{color:#fff;font-size:1.15rem;margin-bottom:1rem}
+aside button{background:none;border:0;color:#c9d6cd;text-align:left;padding:.55rem .7rem;border-radius:6px}
+aside button.on{background:#2c4140;color:#fff}
+aside .sp{flex:1}
+aside small{color:#9fb0a6}
+main{padding:1.5rem 2rem;max-width:1100px;width:100%}
+section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:1rem 1.2rem}
+.grid{display:grid;gap:1rem}
+.g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.kpi b{display:block;font:700 2rem Georgia,serif}.kpi span{color:var(--mu)}
+.bar{display:grid;grid-template-columns:110px 1fr 28px;gap:8px;align-items:center;margin:.4rem 0}
+.bar i{display:block;height:10px;background:var(--pr);border-radius:5px}.bar em{font-style:normal;text-align:right}
+.tools{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
+.tools input,.tools select{width:auto;flex:1;min-width:140px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid var(--bd);vertical-align:top}
+th{background:#f6f7f4;font-weight:600}
+.ac{white-space:nowrap}.ac button{padding:.25rem .5rem;margin-right:.2rem}
+.wrap{overflow-x:auto}
+.b{padding:.1rem .55rem;border-radius:20px;font-size:.8rem;border:1px solid}
+.b.procesado{color:var(--ok)}.b.procesando{color:var(--wa)}.b.error{color:var(--er)}
+#drop{border:2px dashed var(--bd);border-radius:10px;padding:1.2rem;text-align:center;margin-bottom:1rem;background:#fafbf8}
+#drop.over{border-color:var(--pr);background:#e5f1ef}
+.res{padding:.8rem 0;border-bottom:1px solid var(--bd)}.res:last-child{border:0}
+#chat{height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:.6rem;margin-bottom:.8rem}
+.m{max-width:80%;padding:.6rem .9rem;border-radius:10px;white-space:pre-wrap}
+.m.u{align-self:flex-end;background:var(--pr);color:#fff}.m.a{background:#fff;border:1px solid var(--bd)}
+.m small{display:block;margin-top:.4rem;color:var(--mu)}
+dialog{border:1px solid var(--bd);border-radius:10px;max-width:520px;width:92%;padding:1.4rem}
+dialog::backdrop{background:#0006}
+dt{font-weight:600;margin-top:.5rem}dd{margin:0}
+.row{display:flex;gap:.6rem}.row>*{flex:1}
+#toast{position:fixed;bottom:1rem;right:1rem;background:var(--ink);color:#fff;padding:.7rem 1rem;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:320px}
+#toast.show{opacity:1}#toast.err{background:var(--er)}
+@media(max-width:760px){#app{grid-template-columns:1fr}aside{flex-direction:row;overflow-x:auto;align-items:center}aside h1,aside .sp,aside small{display:none}main{padding:1rem}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <form id="lf">
+    <h1>Gestión documental con IA</h1>
+    <p class="mu">Ingresa para consultar y administrar tus documentos.</p>
+    <label>Usuario<input id="u" required autocomplete="username"></label>
+    <label>Contraseña<input id="p" type="password" required autocomplete="current-password"></label>
+    <p id="hint" class="mu"></p>
+    <p id="lerr" class="err-t"></p>
+    <button class="pr">Iniciar sesión</button>
+    <button type="button" class="ln" onclick="cfgOpen()">Configurar conexión con n8n</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <aside id="nav">
+    <h1>Gestión documental</h1>
+    <button data-t="panel" class="on">Panel</button>
+    <button data-t="docs">Documentos</button>
+    <button data-t="buscar">Buscar</button>
+    <button data-t="chat">Preguntar</button>
+    <button data-t="err">Errores <span id="nerr"></span></button>
+    <span class="sp"></span>
+    <small id="who"></small>
+    <button onclick="cfgOpen()">Conexión</button>
+    <button id="out">Cerrar sesión</button>
+  </aside>
+  <main>
+    <section id="t-panel" class="on">
+      <h2>Panel del repositorio</h2>
+      <div id="kpis" class="grid g4"></div>
+      <div class="grid g2" style="margin-top:1rem">
+        <div class="card"><h3>Por categoría</h3><div id="bycat"></div></div>
+        <div class="card"><h3>Por formato</h3><div id="bytipo"></div></div>
+      </div>
+    </section>
+
+    <section id="t-docs">
+      <h2>Documentos</h2>
+      <div class="tools">
+        <select id="urepo" aria-label="Repositorio de destino"></select>
+        <button id="nrepo">Nuevo repositorio</button>
+      </div>
+      <div id="drop">
+        Arrastra aquí tus archivos PDF, DOCX o TXT (máx. 20 MB) o
+        <button class="ln" id="pick">elígelos desde tu equipo</button>
+        <input id="file" type="file" multiple accept=".pdf,.docx,.txt" hidden>
+      </div>
+      <div class="tools">
+        <input id="fq" placeholder="Filtrar por nombre" aria-label="Filtrar por nombre">
+        <select id="frepo" aria-label="Filtrar por repositorio"></select>
+      </div>
+      <div class="wrap"><table>
+        <thead><tr><th>Nombre</th><th>Repositorio</th><th>Formato</th><th>Categoría</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table></div>
+    </section>
+
+    <section id="t-buscar">
+      <h2>Búsqueda en el contenido</h2>
+      <form id="sf" class="tools"><input id="sq" placeholder="Ej.: cláusula de renovación" required><button class="pr">Buscar</button></form>
+      <div id="sres" class="card"><p class="mu">Escribe lo que buscas; la búsqueda es por significado, no solo por palabras exactas.</p></div>
+    </section>
+
+    <section id="t-chat">
+      <h2>Preguntar a los documentos</h2>
+      <div class="tools"><select id="crepo" aria-label="Repositorio a consultar"></select></div>
+      <div id="chat" class="card"></div>
+      <form id="cf" class="row"><input id="cq" placeholder="Ej.: ¿Qué vigencia tiene el contrato con el proveedor?" required><button class="pr" style="flex:0 0 auto">Preguntar</button></form>
+    </section>
+
+    <section id="t-err">
+      <h2>Errores de procesamiento</h2>
+      <div id="errs" class="card"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg"><div id="dt"></div></dialog>
+
+<dialog id="cfg">
+  <h3>Conexión con n8n</h3>
+  <label>URL del webhook "gestion-documental"<input id="curl" placeholder="https://tu-n8n.com/webhook/gestion-documental"></label>
+  <label>URL del webhook del agente RAG (buscar y preguntar)<input id="curlrag" placeholder="https://tu-n8n.com/webhook/agente-rag"></label>
+  <label style="font-weight:400"><input id="cdemo" type="checkbox" style="width:auto"> Modo demo (datos de ejemplo, sin n8n)</label>
+  <div class="row" style="margin-top:1rem"><button onclick="cfg.close()">Cancelar</button><button class="pr" id="csave">Guardar</button></div>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const S={token:'',user:'',rol:'',docs:[],repos:[],cfg:{url:'',urlRag:'',demo:true},sesion:(self.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)};
+try{Object.assign(S.cfg,JSON.parse(localStorage.getItem('gd_cfg')||'{}'))}catch(e){}
+
+/* ---------- Capa de conexión con n8n ----------
+   Un solo webhook (POST) que recibe {accion, ...datos}; en la subida va como multipart con el campo "file". */
+async function api(accion,datos={},file){
+  if(S.cfg.demo||!S.cfg.url)return mock(accion,datos,file);
+  const rag=(accion==='buscar'||accion==='consultar');
+  const base=(rag&&S.cfg.urlRag)?S.cfg.urlRag:S.cfg.url;
+  const o={method:'POST',headers:{Authorization:'Bearer '+S.token}};
+  if(file){const f=new FormData();f.append('accion',accion);for(const k in datos)f.append(k,datos[k]);f.append('file',file);o.body=f}
+  else{o.headers['Content-Type']='application/json';o.body=JSON.stringify({accion,...datos})}
+  const r=await fetch(base,o);
+  if(!r.ok){let m='';try{m=(await r.json()).error}catch(e){}throw new Error(m||'El servidor respondió '+r.status)}
+  return r.json();
+}
+
+/* ---------- Modo demo ---------- */
+const cats=['Contrato','Factura','Informe'];
+const DB={repos:['General','Contratos','Finanzas'],docs:[
+{id:1,nombre:'Contrato_proveedor_2026.pdf',repo:'Contratos',tipo:'PDF',estado:'procesado',categoria:'Contrato',fecha:'2026-10-10',resumen:'Contrato de suministro por 12 meses con renovación automática.',datos:{Partes:'Empresa X / Proveedor Y',Vigencia:'12 meses',Valor:'$48.000.000 COP'}},
+{id:2,nombre:'Factura_0457.pdf',repo:'Finanzas',tipo:'PDF',estado:'procesado',categoria:'Factura',fecha:'2026-10-12',resumen:'Factura por servicios de mantenimiento de octubre.',datos:{Número:'0457',Total:'$3.200.000 COP',Vencimiento:'2026-11-12'}},
+{id:3,nombre:'Informe_trimestral.docx',repo:'General',tipo:'DOCX',estado:'procesado',categoria:'Informe',fecha:'2026-10-14',resumen:'Resultados del tercer trimestre: ventas +8 %.',datos:{Periodo:'T3 2026',Área:'Comercial'}},
+{id:4,nombre:'escaneo_ilegible.pdf',repo:'General',tipo:'PDF',estado:'error',categoria:'',fecha:'2026-10-15',detalle:'No se pudo extraer texto: el PDF es una imagen escaneada. Súbelo con OCR.'}]};
+let nid=10;
+async function mock(a,d,f){
+  await new Promise(r=>setTimeout(r,250));
+  if(a==='login'){if(!d.usuario||!d.clave)throw new Error('Credenciales no válidas');return{token:'demo',nombre:d.usuario,rol:'admin'}}
+  if(a==='listar')return JSON.parse(JSON.stringify({documentos:DB.docs,repos:DB.repos}));
+  if(a==='crear_repo'){DB.repos.push(d.nombre);return{ok:true}}
+  if(a==='subir'){const id=nid++,doc={id,nombre:f.name,repo:d.repo,tipo:f.name.split('.').pop().toUpperCase(),estado:'procesando',categoria:'',fecha:new Date().toISOString().slice(0,10)};
+    DB.docs.unshift(doc);setTimeout(()=>Object.assign(doc,{estado:'procesado',categoria:cats[id%3],resumen:'Resumen generado por IA (demo).',datos:{Campo:'Valor de ejemplo'}}),3000);return{ok:true,id}}
+  if(a==='eliminar'){DB.docs=DB.docs.filter(x=>x.id!=d.id);return{ok:true}}
+  if(a==='reintentar'){const x=DB.docs.find(x=>x.id==d.id);if(x)Object.assign(x,{estado:'procesado',categoria:'Informe',resumen:'Reprocesado (demo).',datos:{}});return{ok:true}}
+  if(a==='descargar')return{url:''};
+  if(a==='buscar')return{resultados:DB.docs.filter(x=>(x.resumen||'').toLowerCase().includes(d.q.toLowerCase())).map(x=>({archivo:x.nombre,pagina:1,fragmento:x.resumen}))};
+  if(a==='consultar')return{respuesta:'Respuesta de demostración. Con n8n conectado, aquí responde Gemini usando los fragmentos recuperados de Qdrant.',fuentes:[{archivo:DB.docs[0].nombre,pagina:2}]};
+}
+
+/* ---------- Utilidades de interfaz ---------- */
+function toast(m,err){const t=$('#toast');t.textContent=m;t.className='show'+(err?' err':'');clearTimeout(toast.t);toast.t=setTimeout(()=>t.className='',3500)}
+function tab(t){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));document.querySelectorAll('#nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
+$('#nav').onclick=e=>{const b=e.target.closest('[data-t]');if(b)tab(b.dataset.t)};
+function cfgOpen(){$('#curl').value=S.cfg.url;$('#curlrag').value=S.cfg.urlRag||'';$('#cdemo').checked=S.cfg.demo;$('#cfg').showModal()}
+$('#csave').onclick=()=>{S.cfg={url:$('#curl').value.trim(),urlRag:$('#curlrag').value.trim(),demo:$('#cdemo').checked};try{localStorage.setItem('gd_cfg',JSON.stringify(S.cfg))}catch(e){}
+  $('#cfg').close();hint();toast(S.cfg.demo?'Modo demo activado':'Conexión guardada');if(S.token)load()};
+
+/* ---------- Sesión ---------- */
+function hint(){$('#hint').textContent=(S.cfg.demo||!S.cfg.url)?'Modo demo activo: escribe cualquier usuario y contraseña.':'Conectado a: '+S.cfg.url+(S.cfg.urlRag?' · Agente: '+S.cfg.urlRag:'')}
+hint();
+$('#lf').onsubmit=async e=>{e.preventDefault();$('#lerr').textContent='';
+  try{const r=await api('login',{usuario:$('#u').value,clave:$('#p').value});
+    Object.assign(S,{token:r.token,user:r.nombre,rol:r.rol||'usuario'});
+    $('#login').hidden=true;$('#app').hidden=false;$('#who').textContent=S.user+' ('+S.rol+')';await load()}
+  catch(x){$('#lerr').textContent=x.message}};
+$('#out').onclick=()=>{S.token='';$('#app').hidden=true;$('#login').hidden=false;$('#p').value=''};
+
+/* ---------- Datos y pintado ---------- */
+async function load(){try{const r=await api('listar');S.docs=r.documentos||[];S.repos=r.repos||[];render()}catch(e){toast(e.message,1)}}
+setInterval(()=>{if(S.token&&S.docs.some(d=>d.estado==='procesando'))load()},6000);
+
+const count=(d,k)=>d.reduce((m,x)=>{const v=x[k]||'Sin clasificar';m[v]=(m[v]||0)+1;return m},{});
+const bars=m=>{const mx=Math.max(1,...Object.values(m));return Object.entries(m).map(([k,v])=>`<div class="bar"><span>${esc(k)}</span><i style="width:${v/mx*100}%"></i><em>${v}</em></div>`).join('')||'<p class="mu">Aún no hay datos.</p>'};
+
+function render(){
+  const d=S.docs,c=e=>d.filter(x=>x.estado===e).length;
+  $('#kpis').innerHTML=[['Documentos',d.length],['Procesados',c('procesado')],['En proceso',c('procesando')],['Con error',c('error')]].map(([a,b])=>`<div class="card kpi"><b>${b}</b><span>${a}</span></div>`).join('');
+  $('#bycat').innerHTML=bars(count(d,'categoria'));$('#bytipo').innerHTML=bars(count(d,'tipo'));
+  const opts=S.repos.map(r=>`<option>${esc(r)}</option>`).join('');
+  const keep=$('#frepo').value;
+  $('#urepo').innerHTML=opts;$('#crepo').innerHTML='<option value="">Todos los repositorios</option>'+opts;
+  $('#frepo').innerHTML='<option value="">Todos los repositorios</option>'+opts;$('#frepo').value=keep;
+  $('#nerr').textContent=c('error')?'('+c('error')+')':'';
+  table();errs();
+}
+function table(){
+  const rp=$('#frepo').value,q=$('#fq').value.toLowerCase();
+  const rows=S.docs.filter(x=>(!rp||x.repo===rp)&&(!q||x.nombre.toLowerCase().includes(q)));
+  $('#tb').innerHTML=rows.map(x=>`<tr><td>${esc(x.nombre)}</td><td>${esc(x.repo)}</td><td>${esc(x.tipo)}</td><td>${esc(x.categoria||'Sin clasificar')}</td>
+  <td><span class="b ${esc(x.estado)}">${esc(x.estado)}</span></td><td>${esc(x.fecha)}</td>
+  <td class="ac"><button data-a="ver" data-id="${esc(x.id)}">Ver</button><button data-a="desc" data-id="${esc(x.id)}">Descargar</button>${S.rol==='admin'?`<button class="dg" data-a="del" data-id="${esc(x.id)}">Eliminar</button>`:''}</td></tr>`).join('')
+  ||'<tr><td colspan="7" class="mu">No hay documentos. Sube el primero arrastrándolo a la zona de arriba.</td></tr>';
+}
+function errs(){
+  const e=S.docs.filter(x=>x.estado==='error');
+  $('#errs').innerHTML=e.map(x=>`<div class="res"><b>${esc(x.nombre)}</b> <span class="mu">(${esc(x.repo)}, ${esc(x.fecha)})</span>
+  <p class="err-t" style="margin:.2rem 0">${esc(x.detalle||'Error sin detalle')}</p><button data-a="re" data-id="${esc(x.id)}">Reintentar</button></div>`).join('')
+  ||'<p class="mu">No hay errores. Todos los documentos se procesaron bien.</p>';
+}
+$('#fq').oninput=table;$('#frepo').onchange=table;
+
+/* ---------- Acciones sobre documentos ---------- */
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-a]');if(!b)return;
+  const id=b.dataset.id,x=S.docs.find(d=>String(d.id)===id);if(!x)return;
+  try{
+    if(b.dataset.a==='ver'){
+      const datos=Object.entries(x.datos||{});
+      $('#dt').innerHTML=`<h3>${esc(x.nombre)}</h3><p class="mu">${esc(x.repo)} · ${esc(x.categoria||'Sin clasificar')}</p>
+      <h3>Resumen</h3><p>${esc(x.resumen||'Todavía no hay resumen.')}</p><h3>Información extraída</h3>
+      ${datos.length?'<dl>'+datos.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')+'</dl>':'<p class="mu">Sin datos extraídos.</p>'}
+      ${x.detalle?`<p class="err-t">${esc(x.detalle)}</p>`:''}<button class="pr" onclick="dlg.close()">Cerrar</button>`;
+      $('#dlg').showModal();
+    }
+    if(b.dataset.a==='desc'){const r=await api('descargar',{id});r.url?window.open(r.url,'_blank','noopener'):toast('En modo demo no hay archivo para descargar')}
+    if(b.dataset.a==='del'&&confirm('¿Eliminar "'+x.nombre+'"? También se borrará de la búsqueda.')){await api('eliminar',{id});toast('Documento eliminado');await load()}
+    if(b.dataset.a==='re'){await api('reintentar',{id});toast('Reprocesando documento');await load()}
+  }catch(err){toast(err.message,1)}
+});
+
+/* ---------- Carga de archivos ---------- */
+async function subir(files){
+  const repo=$('#urepo').value;if(!repo)return toast('Crea o elige un repositorio primero',1);
+  for(const f of files){
+    const ext=f.name.split('.').pop().toLowerCase();
+    if(!['pdf','docx','txt'].includes(ext)){toast(f.name+': formato no permitido (usa PDF, DOCX o TXT)',1);continue}
+    if(f.size>20*1048576){toast(f.name+': supera los 20 MB',1);continue}
+    try{await api('subir',{repo},f);toast(f.name+' enviado a procesar')}catch(e){toast(f.name+': '+e.message,1)}
+  }
+  await load();
+}
+$('#pick').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{subir([...e.target.files]);e.target.value=''};
+const dz=$('#drop');
+['dragenter','dragover'].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.add('over')}));
+['dragleave','drop'].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.remove('over')}));
+dz.addEventListener('drop',e=>subir([...e.dataTransfer.files]));
+$('#nrepo').onclick=async()=>{const n=(prompt('Nombre del repositorio')||'').trim();if(!n)return;
+  if(S.repos.includes(n))return toast('Ese repositorio ya existe',1);
+  try{await api('crear_repo',{nombre:n});toast('Repositorio creado');await load();$('#urepo').value=n}catch(e){toast(e.message,1)}};
+
+/* ---------- Búsqueda y preguntas ---------- */
+$('#sf').onsubmit=async e=>{e.preventDefault();$('#sres').innerHTML='<p class="mu">Buscando…</p>';
+  try{const r=await api('buscar',{q:$('#sq').value.trim()});
+    $('#sres').innerHTML=(r.resultados||[]).map(x=>`<div class="res"><b>${esc(x.archivo)}</b> <span class="mu">p. ${esc(x.pagina??'—')}</span><p style="margin:.2rem 0">${esc(x.fragmento)}</p></div>`).join('')||'<p class="mu">No se encontraron fragmentos relacionados. Prueba con otras palabras.</p>'}
+  catch(x){$('#sres').innerHTML='<p class="err-t">'+esc(x.message)+'</p>'}};
+function msg(t,txt){const m=document.createElement('div');m.className='m '+t;m.textContent=txt;$('#chat').append(m);$('#chat').scrollTop=1e6;return m}
+msg('a','Hola. Pregúntame sobre el contenido de los documentos; responderé citando el archivo y la página.');
+$('#cf').onsubmit=async e=>{e.preventDefault();const q=$('#cq').value.trim();if(!q)return;$('#cq').value='';msg('u',q);const w=msg('a','Buscando en los documentos…');
+  try{const r=await api('consultar',{pregunta:q,repo:$('#crepo').value,sesion:S.sesion});w.textContent=r.respuesta;
+    if((r.fuentes||[]).length){const s=document.createElement('small');s.textContent='Fuentes: '+r.fuentes.map(f=>f.archivo+(f.pagina?' (p. '+f.pagina+')':'')).join('; ');w.append(s)}}
+  catch(x){w.textContent='No se pudo responder: '+x.message}$('#chat').scrollTop=1e6};
+</script>
+</body>
+</html>

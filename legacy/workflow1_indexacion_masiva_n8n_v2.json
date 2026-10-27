@@ -1,0 +1,622 @@
+{
+  "name": "RAG - Workflow 1 - Indexación masiva de documentos (v2)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Workflow 1: Indexación masiva (RAG) + clasificación con IA\n\n**Antes de activar:**\n1. Asignar credenciales: Google Drive, Google Sheets, Google Gemini (PaLM) API y Qdrant.\n2. En 'Buscar archivos' poner el ID de la carpeta de Drive.\n3. En 'Leer control' y 'Registrar ...' poner el ID de la hoja. La pestaña 'Control' debe tener las columnas: file_id, nombre, repo, tipo, estado, fecha, usuario, categoria, resumen, datos, detalle.\n4. En 'Indexar en Qdrant' elegir/crear la colección (documentos_rag).\n5. En 'Clasificar con Gemini' crear una credencial Header Auth (header x-goog-api-key con tu clave de Google AI Studio). El modelo es gemini-2.5-flash; puedes cambiarlo dentro del nodo.\n\nFlujo por archivo: descargar → indexar en Qdrant → extraer texto → Gemini clasifica y resume → se registra en Control (estado procesado + categoria, resumen y datos). Si Gemini falla, el documento queda procesado igual y el detalle explica el fallo.\n\nPrimera carga: usar el disparador manual. Luego activar el Schedule.",
+        "height": 300,
+        "width": 420,
+        "color": 5
+      },
+      "id": "n-nota",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "n-sched",
+      "name": "Cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n-manual",
+      "name": "Ejecutar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "searchMethod": "name",
+        "queryString": "",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "ID_DE_LA_CARPETA_DE_DRIVE",
+            "mode": "id"
+          },
+          "whatToSearch": "files"
+        },
+        "options": {
+          "fields": [
+            "id",
+            "name",
+            "mimeType"
+          ]
+        }
+      },
+      "id": "n-drive-search",
+      "name": "Buscar archivos",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        240,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "n-read-control",
+      "name": "Leer control",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        340
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesa archivos sin fila de control o con estado 'pendiente' (subidos desde la página o reintentados).\nconst filas=$('Leer control').all().map(i=>i.json).filter(r=>r.file_id);\nconst hechos=new Set(filas.filter(r=>['procesado','error'].includes(r.estado)).map(r=>r.file_id));\nconst repoDe=new Map(filas.map(r=>[r.file_id,r.repo||'General']));\nconst tiposValidos=['application/pdf','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.google-apps.document'];\nreturn $('Buscar archivos').all()\n  .filter(i=>i.json.id&&!hechos.has(i.json.id)&&tiposValidos.includes(i.json.mimeType))\n  .map(i=>({json:{id:i.json.id,name:i.json.name,mimeType:i.json.mimeType,repo:repoDe.get(i.json.id)||'General'}}));\n"
+      },
+      "id": "n-filter",
+      "name": "Filtrar nuevos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "n-loop",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "application/pdf"
+            }
+          }
+        }
+      },
+      "id": "n-download",
+      "name": "Descargar archivo",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        420
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "documentos_rag",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "n-qdrant",
+      "name": "Indexar en Qdrant",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        420
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "id": "n-embed",
+      "name": "Embeddings Gemini",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "binaryMode": "allInputData",
+        "loader": "auto",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "archivo",
+                "value": "={{ $('Loop Over Items').item.json.name }}"
+              },
+              {
+                "name": "file_id",
+                "value": "={{ $('Loop Over Items').item.json.id }}"
+              },
+              {
+                "name": "repo",
+                "value": "={{ $('Loop Over Items').item.json.repo }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "n-loader",
+      "name": "Cargador de documentos",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 1000,
+        "chunkOverlap": 150
+      },
+      "id": "n-splitter",
+      "name": "Divisor de texto",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "file_id": "={{ $('Loop Over Items').item.json.id }}",
+            "nombre": "={{ $('Loop Over Items').item.json.name }}",
+            "repo": "={{ $('Loop Over Items').item.json.repo }}",
+            "estado": "procesado",
+            "fecha": "={{ $now.toISO() }}",
+            "categoria": "={{ $json.categoria }}",
+            "resumen": "={{ $json.resumen }}",
+            "datos": "={{ $json.datos }}",
+            "detalle": "={{ $json.detalle }}"
+          },
+          "matchingColumns": [
+            "file_id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "n-ok",
+      "name": "Registrar procesado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1720,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "file_id": "={{ $('Loop Over Items').item.json.id }}",
+            "nombre": "={{ $('Loop Over Items').item.json.name }}",
+            "estado": "error",
+            "fecha": "={{ $now.toISO() }}",
+            "detalle": "={{ $json.error?.message ?? 'Error al procesar el archivo' }}"
+          },
+          "matchingColumns": [
+            "file_id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "n-err",
+      "name": "Registrar error",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1720,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "n-wait",
+      "name": "Esperar",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1960,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "binaryMode": "allInputData",
+        "loader": "auto",
+        "options": {}
+      },
+      "id": "n-extract",
+      "name": "Extraer texto",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        700
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const t=String($input.first().json.pageContent||'');\nreturn [{json:{texto:t.slice(0,8000),vacio:!t.trim()}}];"
+      },
+      "id": "n-trim",
+      "name": "Recortar texto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents:[{ role:'user', parts:[{ text: 'Clasifica y resume este documento para un repositorio documental.\\n\\nReglas:\\n- categoria: exactamente una de estas opciones: Contrato, Factura, Informe, Otro\\n- resumen: 2 o 3 frases en español con lo esencial del documento\\n- datos: objeto con hasta 5 campos clave (por ejemplo Partes, Vigencia, Valor, Numero, Periodo, Fecha)\\n\\nDevuelve SOLO un JSON valido con las claves categoria, resumen y datos.\\n\\nDocumento:\\n' + $json.texto }]}], generationConfig:{ temperature:0.2, responseMimeType:'application/json' } }) }}",
+        "options": {}
+      },
+      "id": "n-gemini",
+      "name": "Clasificar con Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        700
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const loop=$('Loop Over Items').first().json;\nlet categoria='',resumen='',datos='',detalle='';\ntry{\n  if($json.vacio)throw new Error('no se pudo extraer texto del archivo');\n  const c=$json.candidates;\n  const raw=(Array.isArray(c)&&c[0]&&c[0].content&&Array.isArray(c[0].content.parts))?c[0].content.parts.map(p=>(p&&p.text)||'').join('').trim():'';\n  if(!raw)throw new Error('Gemini no devolvio contenido');\n  const o=JSON.parse(raw);\n  const validas=['Contrato','Factura','Informe','Otro'];\n  categoria=validas.includes(o.categoria)?o.categoria:'Otro';\n  resumen=String(o.resumen||'').slice(0,800);\n  if(o.datos&&typeof o.datos==='object')datos=JSON.stringify(o.datos).slice(0,1500);\n}catch(e){\n  detalle='Documento indexado, pero no se pudo clasificar ni resumir con IA: '+(e.message||'respuesta inesperada');\n}\nreturn [{json:{categoria,resumen,datos,detalle}}];"
+      },
+      "id": "n-parse",
+      "name": "Parsear clasificación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Ejecutar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Buscar archivos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar archivos": {
+      "main": [
+        [
+          {
+            "node": "Leer control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer control": {
+      "main": [
+        [
+          {
+            "node": "Filtrar nuevos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar nuevos": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Descargar archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar archivo": {
+      "main": [
+        [
+          {
+            "node": "Indexar en Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Indexar en Qdrant": {
+      "main": [
+        [
+          {
+            "node": "Extraer texto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer texto": {
+      "main": [
+        [
+          {
+            "node": "Recortar texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recortar texto": {
+      "main": [
+        [
+          {
+            "node": "Clasificar con Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar con Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parsear clasificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear clasificación": {
+      "main": [
+        [
+          {
+            "node": "Registrar procesado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar procesado": {
+      "main": [
+        [
+          {
+            "node": "Esperar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar error": {
+      "main": [
+        [
+          {
+            "node": "Esperar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperar": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Indexar en Qdrant",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargador de documentos": {
+      "ai_document": [
+        [
+          {
+            "node": "Indexar en Qdrant",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Divisor de texto": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Cargador de documentos",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada 5 minutos": {
+      "main": [
+        [
+          {
+            "node": "Buscar archivos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

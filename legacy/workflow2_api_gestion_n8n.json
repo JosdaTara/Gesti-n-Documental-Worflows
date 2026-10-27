@@ -1,0 +1,1216 @@
+{
+  "name": "RAG - Workflow 2 - API de gestión documental",
+  "nodes": [
+    {
+      "parameters": {
+        "height": 330,
+        "width": 520,
+        "color": 5,
+        "content": "## Workflow 2: API de gestión documental\n\n**Hoja de cálculo (4 pestañas):**\n- Control: file_id, nombre, repo, tipo, estado, fecha, usuario, categoria, resumen, datos, detalle\n- Usuarios: usuario, clave_hash (SHA-256 en hex), rol (admin/usuario)\n- Sesiones: token, usuario, rol, expira\n- Repositorios: nombre\n\n**Configurar:** credenciales de Google Sheets y Google Drive; ID de la hoja en todos los nodos de Sheets; ID de la carpeta en 'Subir a Drive'; URL de Qdrant y credencial Header Auth (api-key) en 'Borrar vectores'.\n\n**Activar** el workflow y usar la URL de producción (/webhook/gestion-documental) en la página.\n\nLas acciones `buscar` y `consultar` las atiende el **Workflow 3 - Agente RAG** (webhook /webhook/agente-rag). Cualquier acción desconocida responde 501."
+      },
+      "id": "w01",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gestion-documental",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "w02",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "6d1f7c1e-3b5a-4a8e-9c0d-2f6a1b9e7a10"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c8884",
+              "leftValue": "={{ $json.body.accion }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "login"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w03",
+      "name": "¿Es login?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $json.body.clave }}",
+        "dataPropertyName": "hash",
+        "encoding": "hex"
+      },
+      "id": "w04",
+      "name": "Hash clave",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        480,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Usuarios",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "w05",
+      "name": "Leer usuarios",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        100
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$('Webhook').first().json.body;\nconst hash=$('Hash clave').first().json.hash;\nconst u=$('Leer usuarios').all().map(i=>i.json).find(x=>x.usuario===b.usuario&&String(x.clave_hash).toLowerCase()===hash);\nif(!u)return [{json:{ok:false}}];\nconst rnd=()=>Math.random().toString(36).slice(2);\nconst token=(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():rnd()+rnd()+rnd();\nreturn [{json:{ok:true,token,usuario:u.usuario,rol:u.rol||'usuario',expira:new Date(Date.now()+8*3600*1000).toISOString()}}];"
+      },
+      "id": "w06",
+      "name": "Verificar clave",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c9192",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w07",
+      "name": "¿Credenciales válidas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sesiones",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $json.token }}",
+            "usuario": "={{ $json.usuario }}",
+            "rol": "={{ $json.rol }}",
+            "expira": "={{ $json.expira }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "w08",
+      "name": "Guardar sesión",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { token: $('Verificar clave').first().json.token, nombre: $('Verificar clave').first().json.usuario, rol: $('Verificar clave').first().json.rol } }}",
+        "options": {}
+      },
+      "id": "w09",
+      "name": "Responder login",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'Usuario o contraseña incorrectos' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "w10",
+      "name": "Responder login inválido",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sesiones",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "w11",
+      "name": "Leer sesiones",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        520
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$('Webhook').first();\nconst w=j.json;\nconst tk=(w.headers.authorization||'').replace(/^Bearer\\s+/i,'');\nconst s=$('Leer sesiones').all().map(i=>i.json).find(x=>x.token&&x.token===tk&&new Date(x.expira)>new Date());\nconst accion=w.body.accion;\nlet error='';\nif(!s)error='Sesión no válida o vencida. Inicia sesión de nuevo.';\nelse if(accion==='eliminar'&&s.rol!=='admin')error='Solo un administrador puede eliminar documentos.';\nreturn [{json:{valido:!error,error,usuario:s?s.usuario:'',rol:s?s.rol:'',accion},binary:j.binary}];"
+      },
+      "id": "w12",
+      "name": "Validar sesión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3089",
+              "leftValue": "={{ $json.valido }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w13",
+      "name": "¿Sesión válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: $json.error || 'Sesión no válida' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "w14",
+      "name": "Responder sesión inválida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "listar",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c3982",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "listar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "subir",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c4593",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "subir"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "eliminar",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c6189",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "eliminar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "reintentar",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c3411",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "reintentar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "descargar",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c2335",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "descargar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "crear_repo",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c8184",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "crear_repo"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "w15",
+      "name": "Acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1200,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'Esta acción aún no está disponible (falta el workflow del agente para buscar y preguntar).' } }}",
+        "options": {
+          "responseCode": 501
+        }
+      },
+      "id": "w16",
+      "name": "Acción no disponible",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        1900
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "w17",
+      "name": "Leer documentos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        420
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Repositorios",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "w18",
+      "name": "Leer repos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1680,
+        420
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const filas=$('Leer documentos').all().map(i=>i.json).filter(d=>d.file_id);\nconst nombres=$('Leer repos').all().map(i=>i.json.nombre).filter(Boolean);\nconst ext=n=>(String(n||'').split('.').pop()||'').toUpperCase();\nconst documentos=filas.map(d=>{let datos={};try{datos=d.datos?JSON.parse(d.datos):{}}catch(e){}\n  return {id:d.file_id,nombre:d.nombre,repo:d.repo||'General',tipo:d.tipo||ext(d.nombre),\n    estado:d.estado==='pendiente'?'procesando':(d.estado||'procesando'),categoria:d.categoria||'',\n    fecha:String(d.fecha||'').slice(0,10),resumen:d.resumen||'',datos,detalle:d.detalle||''}});\ndocumentos.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));\nconst repos=[...new Set([...(nombres.length?nombres:['General']),...documentos.map(d=>d.repo)])];\nreturn [{json:{documentos,repos}}];"
+      },
+      "id": "w19",
+      "name": "Armar listado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "w20",
+      "name": "Responder listado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "file",
+        "name": "={{ $binary.file.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "ID_DE_LA_CARPETA_DE_DRIVE",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "w21",
+      "name": "Subir a Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1440,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "file_id": "={{ $json.id }}",
+            "nombre": "={{ $json.name }}",
+            "repo": "={{ $('Webhook').first().json.body.repo || 'General' }}",
+            "tipo": "={{ String($json.name).split('.').pop().toUpperCase() }}",
+            "estado": "pendiente",
+            "fecha": "={{ $now.toISO() }}",
+            "usuario": "={{ $('Validar sesión').first().json.usuario }}",
+            "categoria": "",
+            "resumen": "",
+            "datos": "",
+            "detalle": ""
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "w22",
+      "name": "Registrar documento",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1680,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, id: $('Subir a Drive').first().json.id } }}",
+        "options": {}
+      },
+      "id": "w23",
+      "name": "Responder subida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "w24",
+      "name": "Leer fila",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        820
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const id=$('Webhook').first().json.body.id;\nconst f=$('Leer fila').all().map(i=>i.json).find(x=>String(x.file_id)===String(id));\nif(!f)throw new Error('Documento no encontrado');\nreturn [{json:{file_id:String(id),row_number:f.row_number}}];"
+      },
+      "id": "w25",
+      "name": "Ubicar fila",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "deleteFile",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.file_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "w26",
+      "name": "Borrar en Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1920,
+        820
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TU-URL-DE-QDRANT:6333/collections/documentos_rag/points/delete?wait=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filter: { must: [ { key: 'metadata.file_id', match: { value: $('Ubicar fila').first().json.file_id } } ] } }) }}",
+        "options": {}
+      },
+      "id": "w27",
+      "name": "Borrar vectores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        820
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "toDelete": "rows",
+        "startIndex": "={{ $('Ubicar fila').first().json.row_number }}",
+        "numberToDelete": 1
+      },
+      "id": "w28",
+      "name": "Borrar fila",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2400,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {}
+      },
+      "id": "w29",
+      "name": "Responder eliminado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Control",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "file_id": "={{ $('Webhook').first().json.body.id }}",
+            "estado": "pendiente",
+            "detalle": ""
+          },
+          "matchingColumns": [
+            "file_id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "w30",
+      "name": "Marcar pendiente",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {}
+      },
+      "id": "w31",
+      "name": "Responder reintento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { url: 'https://drive.google.com/file/d/' + $('Webhook').first().json.body.id + '/view' } }}",
+        "options": {}
+      },
+      "id": "w32",
+      "name": "Responder descarga",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        1260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Repositorios",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "nombre": "={{ $('Webhook').first().json.body.nombre }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "w33",
+      "name": "Guardar repositorio",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        1460
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {}
+      },
+      "id": "w34",
+      "name": "Responder repositorio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        1460
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "¿Es login?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es login?": {
+      "main": [
+        [
+          {
+            "node": "Hash clave",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer sesiones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash clave": {
+      "main": [
+        [
+          {
+            "node": "Leer usuarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer usuarios": {
+      "main": [
+        [
+          {
+            "node": "Verificar clave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar clave": {
+      "main": [
+        [
+          {
+            "node": "¿Credenciales válidas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Credenciales válidas?": {
+      "main": [
+        [
+          {
+            "node": "Guardar sesión",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder login inválido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar sesión": {
+      "main": [
+        [
+          {
+            "node": "Responder login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer sesiones": {
+      "main": [
+        [
+          {
+            "node": "Validar sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesión": {
+      "main": [
+        [
+          {
+            "node": "¿Sesión válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Sesión válida?": {
+      "main": [
+        [
+          {
+            "node": "Acción",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder sesión inválida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acción": {
+      "main": [
+        [
+          {
+            "node": "Leer documentos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Subir a Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer fila",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar pendiente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder descarga",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar repositorio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acción no disponible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer documentos": {
+      "main": [
+        [
+          {
+            "node": "Leer repos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer repos": {
+      "main": [
+        [
+          {
+            "node": "Armar listado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar listado": {
+      "main": [
+        [
+          {
+            "node": "Responder listado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir a Drive": {
+      "main": [
+        [
+          {
+            "node": "Registrar documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar documento": {
+      "main": [
+        [
+          {
+            "node": "Responder subida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer fila": {
+      "main": [
+        [
+          {
+            "node": "Ubicar fila",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ubicar fila": {
+      "main": [
+        [
+          {
+            "node": "Borrar en Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar en Drive": {
+      "main": [
+        [
+          {
+            "node": "Borrar vectores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar vectores": {
+      "main": [
+        [
+          {
+            "node": "Borrar fila",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar fila": {
+      "main": [
+        [
+          {
+            "node": "Responder eliminado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar pendiente": {
+      "main": [
+        [
+          {
+            "node": "Responder reintento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar repositorio": {
+      "main": [
+        [
+          {
+            "node": "Responder repositorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

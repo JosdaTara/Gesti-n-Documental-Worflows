@@ -1,0 +1,562 @@
+{
+  "name": "RAG - Workflow 3 - Agente de búsqueda y consulta",
+  "nodes": [
+    {
+      "parameters": {
+        "height": 330,
+        "width": 540,
+        "color": 5,
+        "content": "## Workflow 3: Agente RAG (buscar y preguntar)\n\nAtiende las acciones `buscar` y `consultar` de la página (el Workflow 2 responde 501 a esas acciones).\n\n**Antes de activar:**\n1. Credencial Header Auth \"Gemini API Key\": header `x-goog-api-key` con tu clave de Google AI Studio (aistudio.google.com).\n2. Credencial Header Auth \"Qdrant API key\": header `api-key` con la clave de Qdrant Cloud. Si usas Qdrant local sin clave, créala con cualquier valor (Qdrant la ignora).\n3. En 'Leer sesiones' poner el mismo ID de la hoja que el Workflow 2.\n4. En 'Buscar en Qdrant' y 'Buscar fragmentos' poner la URL de tu Qdrant y verificar que la colección sea la misma del Workflow 1 (documentos_rag).\n5. Activar y copiar la URL de producción (`/webhook/agente-rag`) en la página: Configurar conexión → URL del agente RAG.\n\nValida el token de sesión igual que el Workflow 2 (pestaña Sesiones, expiración incluida)."
+      },
+      "id": "a00",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agente-rag",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "a01",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "b7e4d2a9-5c1f-4e8b-8a3d-6f2c9e1b4a70"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "ID_DE_LA_HOJA_DE_CALCULO",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sesiones",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "a02",
+      "name": "Leer sesiones",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        300
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const w=$('Webhook').first().json;\nconst b=w.body||{};\nconst tk=(w.headers.authorization||'').replace(/^Bearer\\s+/i,'');\nconst s=$('Leer sesiones').all().map(i=>i.json).find(x=>x.token&&x.token===tk&&new Date(x.expira)>new Date());\nconst accion=String(b.accion||'');\nconst error=s?'':'Sesión no válida o vencida. Inicia sesión de nuevo.';\nreturn [{json:{valido:!!s,error,usuario:s?s.usuario:'',rol:s?s.rol:'',accion,q:String(b.q||'').trim(),pregunta:String(b.pregunta||'').trim(),repo:String(b.repo||'').trim(),sesion:b.sesion||''}}];"
+      },
+      "id": "a03",
+      "name": "Validar sesión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a041",
+              "leftValue": "={{ $json.valido }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a04",
+      "name": "¿Sesión válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: $json.error || 'Sesión no válida' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "a05",
+      "name": "Responder sesión inválida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "buscar",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a061",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "buscar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "consultar",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a062",
+                    "leftValue": "={{ $json.accion }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "consultar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "a06",
+      "name": "Acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'Acción no disponible. Usa buscar o consultar.' } }}",
+        "options": {
+          "responseCode": 501
+        }
+      },
+      "id": "a07",
+      "name": "Acción no disponible",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model:'models/gemini-embedding-001', content:{ parts:[{ text: $('Validar sesión').first().json.q }] } }) }}",
+        "options": {}
+      },
+      "id": "a08",
+      "name": "Embedir consulta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TU-URL-DE-QDRANT:6333/collections/documentos_rag/points/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ vector: $json.embedding.values, limit: 5, with_payload: true }, $('Validar sesión').first().json.repo ? { filter: { must: [ { key: 'metadata.repo', match: { value: $('Validar sesión').first().json.repo } } ] } } : {})) }}",
+        "options": {}
+      },
+      "id": "a09",
+      "name": "Buscar en Qdrant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const hits=Array.isArray($json.result)?$json.result:[];\nconst resultados=hits.map(h=>({\n  archivo:(h.payload&&h.payload.metadata&&h.payload.metadata.archivo)||'Documento',\n  fragmento:String((h.payload&&h.payload.text)||'').slice(0,600),\n  score:typeof h.score==='number'?Math.round(h.score*1000)/1000:null\n}));\nreturn [{json:{resultados}}];"
+      },
+      "id": "a10",
+      "name": "Formatear resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "a11",
+      "name": "Responder resultados",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model:'models/gemini-embedding-001', content:{ parts:[{ text: $('Validar sesión').first().json.pregunta }] } }) }}",
+        "options": {}
+      },
+      "id": "a12",
+      "name": "Embedir pregunta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        720
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TU-URL-DE-QDRANT:6333/collections/documentos_rag/points/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ vector: $json.embedding.values, limit: 6, with_payload: true }, $('Validar sesión').first().json.repo ? { filter: { must: [ { key: 'metadata.repo', match: { value: $('Validar sesión').first().json.repo } } ] } } : {})) }}",
+        "options": {}
+      },
+      "id": "a13",
+      "name": "Buscar fragmentos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        720
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const v=$('Validar sesión').first().json;\nconst hits=Array.isArray($json.result)?$json.result:[];\nconst frags=hits.map((h,i)=>({\n  n:i+1,\n  archivo:(h.payload&&h.payload.metadata&&h.payload.metadata.archivo)||'Documento',\n  texto:String((h.payload&&h.payload.text)||'').slice(0,1500)\n}));\nif(!v.pregunta||!frags.length)return [{json:{prompt:'',fuentes:[],vacia:true}}];\nconst contexto=frags.map(f=>'[Fragmento '+f.n+'] Archivo: '+f.archivo+'\\n'+f.texto).join('\\n\\n');\nconst prompt='Eres el asistente de un repositorio documental. Responde en español usando SOLO la información de los fragmentos. Si la respuesta no está en los fragmentos, dilo con claridad.\\n\\nFragmentos:\\n'+contexto+'\\n\\nPregunta: '+v.pregunta;\nconst fuentes=[...new Map(frags.map(f=>[f.archivo,{archivo:f.archivo}])).values()];\nreturn [{json:{prompt,fuentes,vacia:false}}];"
+      },
+      "id": "a14",
+      "name": "Armar prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents:[{ role:'user', parts:[{ text: $json.prompt }] }], generationConfig:{ temperature:0.3 } }) }}",
+        "options": {}
+      },
+      "id": "a15",
+      "name": "Gemini responde",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        720
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev=$('Armar prompt').first().json;\nif(prev.vacia)return [{json:{respuesta:'No encontré fragmentos relevantes en los documentos para responder esa pregunta.',fuentes:[]}}];\nlet respuesta='';\ntry{\n  const c=$json.candidates;\n  if(Array.isArray(c)&&c[0]&&c[0].content&&Array.isArray(c[0].content.parts))\n    respuesta=c[0].content.parts.map(p=>(p&&p.text)||'').join('').trim();\n}catch(e){}\nif(!respuesta)respuesta='La IA no pudo generar una respuesta en este momento. Intenta de nuevo.';\nreturn [{json:{respuesta,fuentes:prev.fuentes||[]}}];"
+      },
+      "id": "a16",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "a17",
+      "name": "Responder consulta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        720
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Leer sesiones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer sesiones": {
+      "main": [
+        [
+          {
+            "node": "Validar sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesión": {
+      "main": [
+        [
+          {
+            "node": "¿Sesión válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Sesión válida?": {
+      "main": [
+        [
+          {
+            "node": "Acción",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder sesión inválida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acción": {
+      "main": [
+        [
+          {
+            "node": "Embedir consulta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Embedir pregunta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acción no disponible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedir consulta": {
+      "main": [
+        [
+          {
+            "node": "Buscar en Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar en Qdrant": {
+      "main": [
+        [
+          {
+            "node": "Formatear resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear resultados": {
+      "main": [
+        [
+          {
+            "node": "Responder resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedir pregunta": {
+      "main": [
+        [
+          {
+            "node": "Buscar fragmentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar fragmentos": {
+      "main": [
+        [
+          {
+            "node": "Armar prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini responde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini responde": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
