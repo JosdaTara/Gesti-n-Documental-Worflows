@@ -54,11 +54,13 @@ class ConsultarOut(BaseModel):
     sesion: Optional[str] = None
 
 class VisionItem(BaseModel):
-    descripcion: str
-    cantidad: int = 1
+    descripcion: str = ""
+    cantidad: float = 1
     valor: float = 0.0
 
-class VisionFactura(BaseModel):
+class FacturaOut(BaseModel):
+    id: str
+    imagen_id: Optional[str] = None
     proveedor: Optional[str] = None
     fecha: Optional[str] = None
     nit: Optional[str] = None
@@ -66,8 +68,18 @@ class VisionFactura(BaseModel):
     items: List[VisionItem] = []
     total: Optional[float] = None
     confianza: float = 0.0
+    confianza_campos: Dict[str, float] = {}
+    estado: str                      # por_confirmar | validada | confirmada
+    metodo: Optional[str] = None     # vision:gemini | ocr+groq | texto:gemini | manual
+    origen: Optional[str] = None     # foto | pdf_digital | pdf_escaneado
+    advertencias: List[str] = []
+    creado_en: Optional[str] = None
+    revisado_en: Optional[str] = None
 
-class VisionOut(BaseModel):
-    factura: VisionFactura
-    estado: str  # por_confirmar | validada
-    imagen_id: str
+class FacturaEdit(BaseModel):
+    proveedor: str = Field(..., min_length=1, max_length=255)
+    fecha: Optional[str] = None
+    nit: Optional[str] = None
+    moneda: Optional[str] = "COP"
+    total: float = Field(..., gt=0)
+    items: Optional[List[VisionItem]] = None

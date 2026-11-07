@@ -40,50 +40,57 @@ class RespuestaLLM:
 
 # --- proveedores ---------------------------------------------------------------
 
-def proveedores_configurados() -> list[str]:
+LOCALES = {"ollama"}   # proveedores que no envían datos fuera del servidor
+
+
+def proveedores_configurados(orden_csv: str | None = None) -> list[str]:
     disponibles = {
         "gemini": bool(settings.GEMINI_API_KEY),
         "groq": bool(settings.GROQ_API_KEY),
         "ollama": bool(settings.OLLAMA_BASE_URL),
     }
-    orden = [p.strip().lower() for p in settings.LLM_PROVIDERS.split(",") if p.strip()]
+    orden = [p.strip().lower() for p in (orden_csv or settings.LLM_PROVIDERS).split(",") if p.strip()]
     return [p for p in orden if disponibles.get(p)]
 
 
-def crear_modelo(proveedor: str, temperatura: float = 0.2):
-    """Devuelve un chat model de LangChain para el proveedor indicado."""
-    if proveedor == "gemini":
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=settings.GEMINI_MODEL, google_api_key=settings.GEMINI_API_KEY,
-                                      temperature=temperatura, max_retries=1, timeout=60)
-    if proveedor == "groq":
-        from langchain_groq import ChatGroq
-        return ChatGroq(model=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY,
-                        temperature=temperatura, max_retries=1, timeout=60)
-    if proveedor == "ollama":
-        from langchain_ollama import ChatOllama
-        return ChatOllama(model=settings.OLLAMA_MODEL, base_url=settings.OLLAMA_BASE_URL,
-                          temperature=temperatura)
-    raise ValueError(f"Proveedor desconocido: {proveedor}")
-
-
-def nombre_modelo(proveedor: str) -> str:
+def nombre_modelo(proveedor: str, vision: bool = False) -> str:
+    if vision:
+        return {"gemini": settings.GEMINI_MODEL, "groq": settings.GROQ_VISION_MODEL,
+                "ollama": settings.OLLAMA_VISION_MODEL}.get(proveedor, "?")
     return {"gemini": settings.GEMINI_MODEL, "groq": settings.GROQ_MODEL,
             "ollama": settings.OLLAMA_MODEL}.get(proveedor, "?")
 
 
-def con_fallback(tarea: Callable[[object], T], *, temperatura: float = 0.2) -> tuple[T, str, list[str]]:
+def crear_modelo(proveedor: str, temperatura: float = 0.2, vision: bool = False):
+    """Devuelve un chat model de LangChain para el proveedor indicado."""
+    modelo = nombre_modelo(proveedor, vision)
+    if proveedor == "gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(model=modelo, google_api_key=settings.GEMINI_API_KEY,
+                                      temperature=temperatura, max_retries=1, timeout=90)
+    if proveedor == "groq":
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=modelo, api_key=settings.GROQ_API_KEY,
+                        temperature=temperatura, max_retries=1, timeout=90)
+    if proveedor == "ollama":
+        from langchain_ollama import ChatOllama
+        return ChatOllama(model=modelo, base_url=settings.OLLAMA_BASE_URL, temperature=temperatura)
+    raise ValueError(f"Proveedor desconocido: {proveedor}")
+
+
+def con_fallback(tarea: Callable[[object], T], *, temperatura: float = 0.2,
+                 proveedores: list[str] | None = None, vision: bool = False) -> tuple[T, str, list[str]]:
     """Ejecuta `tarea(modelo)` con cada proveedor en orden hasta que uno funcione.
 
     Devuelve (resultado, proveedor_usado, fallos_previos).
     """
-    proveedores = proveedores_configurados()
+    proveedores = proveedores_configurados() if proveedores is None else proveedores
     if not proveedores:
         raise LLMNoDisponible("No hay ningún modelo de IA configurado (GEMINI_API_KEY, GROQ_API_KEY u OLLAMA_BASE_URL).")
     fallos: list[str] = []
     for p in proveedores:
         try:
-            modelo = crear_modelo(p, temperatura)
+            modelo = crear_modelo(p, temperatura, vision) if vision else crear_modelo(p, temperatura)
             resultado = con_reintentos(intentos=2)(tarea)(modelo)
             if fallos:
                 log.warning("Plan B: respondió %s tras fallar %s", p, fallos)
@@ -120,13 +127,14 @@ def extraer_json(texto: str) -> dict:
 
 # --- API pública ----------------------------------------------------------------
 
-def invocar(prompt: str, *, accion: str, usuario_id: int | None = None,
-            temperatura: float = 0.2, sistema: str | None = None) -> RespuestaLLM:
+def invocar(prompt: str, *, accion: str, usuario_id: int | None = None, temperatura: float = 0.2,
+            sistema: str | None = None, proveedores: list[str] | None = None) -> RespuestaLLM:
     """Envía un prompt al primer proveedor disponible y audita la llamada."""
     from langchain_core.messages import HumanMessage, SystemMessage
     mensajes = ([SystemMessage(sistema)] if sistema else []) + [HumanMessage(prompt)]
     t0 = time.monotonic()
-    respuesta, proveedor, fallos = con_fallback(lambda m: m.invoke(mensajes), temperatura=temperatura)
+    respuesta, proveedor, fallos = con_fallback(lambda m: m.invoke(mensajes), temperatura=temperatura,
+                                                proveedores=proveedores)
     texto = texto_de(respuesta)
     auditar(f"ia:{accion}", usuario_id=usuario_id, entidad="llm", detalle={
         "proveedor": proveedor, "modelo": nombre_modelo(proveedor), "fallos_previos": fallos,
@@ -134,9 +142,10 @@ def invocar(prompt: str, *, accion: str, usuario_id: int | None = None,
     return RespuestaLLM(texto, proveedor, fallos)
 
 
-def invocar_json(prompt: str, *, accion: str, usuario_id: int | None = None) -> tuple[dict, str]:
+def invocar_json(prompt: str, *, accion: str, usuario_id: int | None = None,
+                 proveedores: list[str] | None = None) -> tuple[dict, str]:
     r = invocar(prompt + "\n\nResponde SOLO con un objeto JSON válido, sin texto adicional.",
-                accion=accion, usuario_id=usuario_id, temperatura=0.1)
+                accion=accion, usuario_id=usuario_id, temperatura=0.1, proveedores=proveedores)
     return extraer_json(r.texto), r.proveedor
 
 

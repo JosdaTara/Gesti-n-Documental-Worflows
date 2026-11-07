@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:5500,http://localhost:8000"
     INDEXER_CRON_MINUTES: int = 5
     CONFIDENCE_THRESHOLD: float = 0.85
+    # Módulo de visión
+    VISION_PROVIDERS: str = "gemini,groq,ollama"
+    GROQ_VISION_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    OLLAMA_VISION_MODEL: str = "llama3.2-vision"
+    # local: solo modelos locales | anonimizado: se tapan datos personales antes de enviar
+    # a servicios externos (requiere Tesseract) | externo: se envía la imagen tal cual
+    # (solo con autorización registrada del usuario)
+    VISION_PRIVACY_MODE: str = "anonimizado"
+    VISION_MAX_MB: int = 10
     # Motor de automatización
     SCHEDULER_ENABLED: bool = True
     RETRY_ATTEMPTS: int = 3

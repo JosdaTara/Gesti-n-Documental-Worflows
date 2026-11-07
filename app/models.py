@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, Text, Float, BigInteger, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Float, BigInteger, Date, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -57,14 +57,22 @@ class Factura(Base):
     __tablename__ = "facturas"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     documento_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id"))
+    imagen_id = Column(UUID(as_uuid=True), ForeignKey("imagenes.id"))
     proveedor = Column(String(255))
-    fecha = Column(DateTime)
+    fecha = Column(Date)
     nit = Column(String(40))
     moneda = Column(String(8), default="COP")
     items = Column(JSON)
     total = Column(Float)
     confianza = Column(Float)
-    estado = Column(String(20), nullable=False, default="por_confirmar")
+    confianza_campos = Column(JSON)       # confianza por campo (0-1)
+    metodo = Column(String(60))           # vision:gemini | ocr+groq | manual ...
+    origen = Column(String(20))           # foto | pdf_digital | pdf_escaneado
+    advertencias = Column(JSON)
+    datos_ia = Column(JSON)               # lo que extrajo la IA, para medir aciertos tras la revisión
+    estado = Column(String(20), nullable=False, default="por_confirmar")  # por_confirmar|validada|confirmada
+    revisado_por = Column(Integer, ForeignKey("usuarios.id"))
+    revisado_en = Column(DateTime(timezone=True))
     creado_por = Column(Integer, ForeignKey("usuarios.id"))
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 

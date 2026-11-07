@@ -10,7 +10,6 @@ bcrypt>=4.1.0
 python-multipart>=0.0.9
 httpx>=0.27.0
 google-genai>=1.0.0
-google-generativeai>=0.7.0   # solo vision_service; se elimina en la Fase 3
 langchain>=1.0.0
 langchain-google-genai>=4.0.0
 langchain-groq>=1.0.0

@@ -60,6 +60,13 @@ dt{font-weight:600;margin-top:.5rem}dd{margin:0}
 .row{display:flex;gap:.6rem}.row>*{flex:1}
 #toast{position:fixed;bottom:1rem;right:1rem;background:var(--ink);color:#fff;padding:.7rem 1rem;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:320px}
 #toast.show{opacity:1}#toast.err{background:var(--er)}
+.b.validada,.b.confirmada{color:var(--ok)}.b.por_confirmar{color:var(--wa)}
+.cf{font-size:.75rem;font-weight:600;margin-left:.4rem;padding:0 .4rem;border-radius:10px}
+.cf.alta{background:#e3f3ea;color:var(--ok)}.cf.media{background:#fbf0dc;color:var(--wa)}.cf.baja{background:#f8e1df;color:var(--er)}
+#fprev{max-width:100%;max-height:420px;border-radius:8px;border:1px solid var(--bd);display:block;margin:auto}
+.cap{display:flex;gap:.6rem;flex-wrap:wrap}.cap button{flex:1;min-width:150px;padding:.8rem}
+.adv{margin:.5rem 0;padding:.5rem .8rem;background:#fbf0dc;border-radius:6px;color:#6b4300}
+label.chk{font-weight:400;display:flex;gap:.5rem;align-items:flex-start}label.chk input{width:auto;margin-top:.2rem}
 @media(max-width:760px){#app{grid-template-columns:1fr}aside{flex-direction:row;overflow-x:auto;align-items:center}aside h1,aside .sp,aside small{display:none}main{padding:1rem}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -86,6 +93,7 @@ dt{font-weight:600;margin-top:.5rem}dd{margin:0}
     <button data-t="docs">Documentos</button>
     <button data-t="buscar">Buscar</button>
     <button data-t="chat">Preguntar</button>
+    <button data-t="fact">Facturas</button>
     <button data-t="err">Errores <span id="nerr"></span></button>
     <span class="sp"></span>
     <small id="who"></small>
@@ -136,6 +144,50 @@ dt{font-weight:600;margin-top:.5rem}dd{margin:0}
       <form id="cf" class="row"><input id="cq" placeholder="Ej.: ¿Qué vigencia tiene el contrato con el proveedor?" required><button class="pr" style="flex:0 0 auto">Preguntar</button></form>
     </section>
 
+    <section id="t-fact">
+      <h2>Lectura de facturas</h2>
+      <div class="card">
+        <p class="mu" style="margin-top:0">Toma una foto de la factura o recibo (bien iluminada, sin sombras, con todo el documento a la vista) o sube un PDF. La IA extrae proveedor, NIT, fecha, ítems y total.</p>
+        <div class="cap">
+          <button class="pr" id="fcam">Tomar foto</button>
+          <button id="fpick">Subir imagen o PDF</button>
+        </div>
+        <input id="fcamin" type="file" accept="image/*" capture="environment" hidden>
+        <input id="ffile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+        <label class="chk"><input type="checkbox" id="fcons"> Declaro que la empresa está autorizada para tratar los datos personales que aparezcan en este documento, con la finalidad de registrar la compra (Ley 1581 de 2012).</label>
+        <p id="fstat" class="mu" role="status"></p>
+      </div>
+
+      <div id="frev" class="card" style="margin-top:1rem" hidden>
+        <h3>Revisión <span id="fest" class="b"></span> <small class="mu" id="fmet"></small></h3>
+        <div id="fadv"></div>
+        <div class="grid g2">
+          <div><img id="fprev" alt="Imagen de la factura"></div>
+          <form id="fform">
+            <label>Proveedor <span class="cf" data-c="proveedor"></span><input id="f_proveedor" required></label>
+            <label>NIT <span class="cf" data-c="nit"></span><input id="f_nit" placeholder="900123456-7"></label>
+            <label>Fecha <span class="cf" data-c="fecha"></span><input id="f_fecha" type="date"></label>
+            <div class="row">
+              <label>Total <span class="cf" data-c="total"></span><input id="f_total" type="number" min="0" step="0.01" required></label>
+              <label style="flex:0 0 90px">Moneda<input id="f_moneda" maxlength="8"></label>
+            </div>
+            <p style="margin:.3rem 0"><b>Ítems</b> <span class="cf" data-c="items"></span></p>
+            <div id="fitems" class="mu"></div>
+            <button class="pr" id="fok" style="width:100%;margin-top:1rem">Confirmar y guardar</button>
+          </form>
+        </div>
+      </div>
+
+      <h3 style="margin-top:1.5rem">Facturas registradas</h3>
+      <div class="tools"><select id="fflt" aria-label="Filtrar facturas por estado">
+        <option value="">Todas</option><option value="por_confirmar">Por confirmar</option><option value="validada">Validadas</option><option value="confirmada">Confirmadas</option>
+      </select></div>
+      <div class="wrap"><table>
+        <thead><tr><th>Proveedor</th><th>NIT</th><th>Fecha</th><th>Total</th><th>Confianza</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="ftb"></tbody>
+      </table></div>
+    </section>
+
     <section id="t-err">
       <h2>Errores de procesamiento</h2>
       <div id="errs" class="card"></div>
@@ -171,8 +223,16 @@ const RUTAS={
   reintentar:d=>['POST','/api/documents/'+encodeURIComponent(d.id)+'/retry'],
   descargar:d=>['GET','/api/documents/'+encodeURIComponent(d.id)+'/download'],
   buscar:d=>['POST','/api/search',{q:d.q,repo:d.repo||''}],
-  consultar:d=>['POST','/api/chat',{pregunta:d.pregunta,repo:d.repo||'',sesion:d.sesion}]
+  consultar:d=>['POST','/api/chat',{pregunta:d.pregunta,repo:d.repo||'',sesion:d.sesion}],
+  vision_subir:()=>['POST','/api/vision/invoices'],
+  vision_listar:d=>['GET','/api/vision/invoices'+(d.estado?'?estado='+encodeURIComponent(d.estado):'')],
+  vision_ver:d=>['GET','/api/vision/invoices/'+encodeURIComponent(d.id)],
+  vision_confirmar:d=>['POST','/api/vision/invoices/'+encodeURIComponent(d.id)+'/confirm',d.campos]
 };
+async function apiBlob(path){
+  const r=await fetch((S.cfg.url||'').replace(/\/$/,'')+path,{headers:{Authorization:'Bearer '+S.token}});
+  if(!r.ok)throw new Error('No se pudo cargar la imagen');return URL.createObjectURL(await r.blob());
+}
 async function api(accion,datos={},file){
   if(S.cfg.demo)return mock(accion,datos,file);
   const [method,path,body]=RUTAS[accion](datos);
@@ -205,12 +265,15 @@ async function mock(a,d,f){
   if(a==='reintentar'){const x=DB.docs.find(x=>x.id==d.id);if(x)Object.assign(x,{estado:'procesado',categoria:'Informe',resumen:'Reprocesado (demo).',datos:{}});return{ok:true}}
   if(a==='descargar')return{url:''};
   if(a==='buscar')return{resultados:DB.docs.filter(x=>(x.resumen||'').toLowerCase().includes(d.q.toLowerCase())).map(x=>({archivo:x.nombre,pagina:1,fragmento:x.resumen}))};
+  if(a==='vision_subir')return{id:'demo-1',proveedor:'Ferretería El Tornillo SAS',nit:'900123456-8',fecha:'2026-10-20',moneda:'COP',items:[{descripcion:'Tornillos x100',cantidad:2,valor:15000}],total:35700,confianza:0.82,confianza_campos:{proveedor:.95,nit:.3,fecha:.9,total:.95,items:.9},estado:'por_confirmar',metodo:'demo',advertencias:['El dígito de verificación del NIT no coincide: revíselo.']};
+  if(a==='vision_listar')return[];
+  if(a==='vision_confirmar')return{...d.campos,id:d.id,estado:'confirmada',confianza:.82,confianza_campos:{},advertencias:[],items:[]};
   if(a==='consultar')return{respuesta:'Respuesta de demostración. Conectado al servidor, aquí responde el asistente usando los documentos.',fuentes:[{archivo:DB.docs[0].nombre,pagina:2}]};
 }
 
 /* ---------- Utilidades de interfaz ---------- */
 function toast(m,err){const t=$('#toast');t.textContent=m;t.className='show'+(err?' err':'');clearTimeout(toast.t);toast.t=setTimeout(()=>t.className='',3500)}
-function tab(t){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));document.querySelectorAll('#nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
+function tab(t){if(t==='fact'&&S.token)loadFact();document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));document.querySelectorAll('#nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
 $('#nav').onclick=e=>{const b=e.target.closest('[data-t]');if(b)tab(b.dataset.t)};
 function cfgOpen(){$('#curl').value=S.cfg.url;$('#cdemo').checked=S.cfg.demo;$('#cfg').showModal()}
 $('#csave').onclick=()=>{S.cfg={url:$('#curl').value.trim(),demo:$('#cdemo').checked};try{localStorage.setItem('gd_cfg2',JSON.stringify(S.cfg))}catch(e){}
@@ -299,6 +362,50 @@ dz.addEventListener('drop',e=>subir([...e.dataTransfer.files]));
 $('#nrepo').onclick=async()=>{const n=(prompt('Nombre del repositorio')||'').trim();if(!n)return;
   if(S.repos.includes(n))return toast('Ese repositorio ya existe',1);
   try{await api('crear_repo',{nombre:n});toast('Repositorio creado');await load();$('#urepo').value=n}catch(e){toast(e.message,1)}};
+
+/* ---------- Facturas (módulo de visión) ---------- */
+const F={actual:null,prev:''};
+const nivel=c=>c>=.85?'alta':c>=.5?'media':'baja';
+const money=(v,m)=>v==null?'—':Number(v).toLocaleString('es-CO')+' '+(m||'');
+$('#fcam').onclick=()=>$('#fcamin').click();
+$('#fpick').onclick=()=>$('#ffile').click();
+$('#fcamin').onchange=$('#ffile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)leerFactura(f)};
+async function leerFactura(file){
+  if(file.size>10*1024*1024)return toast('La imagen supera los 10 MB',1);
+  $('#fstat').textContent='Leyendo la factura con IA… puede tardar unos segundos.';$('#fcam').disabled=$('#fpick').disabled=true;
+  try{const r=await api('vision_subir',{consentimiento:$('#fcons').checked},file);
+    mostrarFactura(r,file.type.startsWith('image/')?URL.createObjectURL(file):'');
+    $('#fstat').textContent=r.estado==='validada'?'Factura leída con alta confianza y registrada.':'Revisa y corrige los campos marcados antes de confirmar.';
+    loadFact()}
+  catch(x){$('#fstat').textContent='';toast(x.message,1)}
+  finally{$('#fcam').disabled=$('#fpick').disabled=false}
+}
+function mostrarFactura(f,img){
+  F.actual=f;if(F.prev&&F.prev!==img)URL.revokeObjectURL(F.prev);F.prev=img;
+  $('#frev').hidden=false;$('#fprev').hidden=!img;if(img)$('#fprev').src=img;
+  $('#fest').className='b '+f.estado;$('#fest').textContent=f.estado.replace('_',' ');
+  $('#fmet').textContent=(f.metodo?'Método: '+f.metodo+' · ':'')+'Confianza global: '+Math.round((f.confianza||0)*100)+' %';
+  $('#fadv').innerHTML=(f.advertencias||[]).map(a=>`<div class="adv">${esc(a)}</div>`).join('');
+  for(const k of ['proveedor','nit','fecha','total','moneda'])$('#f_'+k).value=f[k]??'';
+  document.querySelectorAll('#fform .cf').forEach(el=>{const c=(f.confianza_campos||{})[el.dataset.c];
+    el.hidden=c==null||f.estado==='confirmada';if(c!=null){el.className='cf '+nivel(c);el.textContent='IA '+Math.round(c*100)+' %'}});
+  $('#fitems').innerHTML=(f.items||[]).length?'<ul style="margin:0;padding-left:1.1rem">'+f.items.map(i=>`<li>${esc(i.descripcion)} — ${i.cantidad} × ${money(i.valor)}</li>`).join('')+'</ul>':'Sin ítems detectados.';
+  const fin=f.estado==='confirmada';document.querySelectorAll('#fform input').forEach(i=>i.disabled=fin);$('#fok').hidden=fin;
+  $('#frev').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('#fform').onsubmit=async e=>{e.preventDefault();if(!F.actual)return;
+  const campos={proveedor:$('#f_proveedor').value.trim(),nit:$('#f_nit').value.trim()||null,fecha:$('#f_fecha').value||null,total:Number($('#f_total').value),moneda:$('#f_moneda').value.trim()||'COP'};
+  try{const r=await api('vision_confirmar',{id:F.actual.id,campos});mostrarFactura(r,F.prev);toast('Factura confirmada');loadFact()}catch(x){toast(x.message,1)}};
+$('#fflt').onchange=()=>loadFact();
+async function loadFact(){try{const l=await api('vision_listar',{estado:$('#fflt').value});
+  $('#ftb').innerHTML=l.map(f=>`<tr><td>${esc(f.proveedor||'—')}</td><td>${esc(f.nit||'—')}</td><td>${esc(f.fecha||'—')}</td><td>${esc(money(f.total,f.moneda))}</td>
+  <td><span class="cf ${nivel(f.confianza||0)}">${Math.round((f.confianza||0)*100)} %</span></td><td><span class="b ${esc(f.estado)}">${esc(f.estado.replace('_',' '))}</span></td>
+  <td class="ac"><button data-f="${esc(f.id)}">${f.estado==='confirmada'?'Ver':'Revisar'}</button></td></tr>`).join('')||'<tr><td colspan="7" class="mu">Aún no hay facturas.</td></tr>'}
+  catch(x){toast(x.message,1)}}
+$('#ftb').onclick=async e=>{const b=e.target.closest('[data-f]');if(!b)return;
+  try{const f=await api('vision_ver',{id:b.dataset.f});let img='';
+    if(f.imagen_id&&!S.cfg.demo&&f.origen!=='pdf_digital'){try{img=await apiBlob('/api/vision/images/'+f.imagen_id)}catch(_){}}
+    mostrarFactura(f,img)}catch(x){toast(x.message,1)}};
 
 /* ---------- Búsqueda y preguntas ---------- */
 $('#sf').onsubmit=async e=>{e.preventDefault();$('#sres').innerHTML='<p class="mu">Buscando…</p>';

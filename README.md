@@ -47,6 +47,25 @@ Ver `.env.example`.
 - **Frontend:** `app/static/index.html` ya habla con la API (antes llamaba a los webhooks de n8n). Se abre en `http://localhost:8000/`.
 - **Base de datos existente:** ejecutar `migrations/002_conversaciones.sql`.
 
+## Módulo de visión: lectura de facturas (Fase 3)
+**Proceso de negocio:** el usuario fotografía una factura o recibo de compra (o sube el PDF) y el sistema extrae proveedor, NIT, fecha, ítems y total, y crea el registro en `facturas` (módulo de compras/gastos).
+
+| Paso | Dónde |
+|---|---|
+| Captura: cámara del celular (`capture="environment"`), imagen o PDF desde la web | pestaña **Facturas** de `app/static/index.html` |
+| Normalización: rotación EXIF, JPEG, máx. 2000 px; PDF digital → texto, PDF escaneado → imagen | `app/services/imagen_utils.py` |
+| Protección de datos (Ley 1581): se ocultan correos, teléfonos y cédulas antes de usar IA externa | `app/services/privacidad.py` |
+| Extracción con plan B: visión (Gemini → Groq → Ollama) → OCR Tesseract + LLM → registro manual | `app/services/vision_service.py` |
+| Validación y confianza por campo: DV del NIT (DIAN), fecha, total vs. ítems (con IVA) | `app/services/validacion_factura.py` |
+
+- **Confianza:** cada campo combina la certeza del modelo con reglas verificables. Si la confianza global es ≥ `CONFIDENCE_THRESHOLD` y ningún campo obligatorio baja de 0,5, la factura queda `validada`; si no, `por_confirmar` y el usuario la revisa y corrige antes de confirmarla (`confirmada`).
+- **Privacidad (`VISION_PRIVACY_MODE`):** `local` solo usa Ollama/Tesseract; `anonimizado` (por defecto) tapa los datos personales en la imagen con Tesseract antes de enviarla y, si Tesseract no está, **no** la envía a servicios externos; `externo` la envía solo si el usuario marcó la autorización. El NIT del proveedor no se oculta (identifica a la empresa).
+- **Control de acceso:** las imágenes se guardan privadas; solo quien la subió o un admin puede verla (`GET /api/vision/images/{id}`). Se audita `subir_imagen`, `ver_imagen`, `confirmar_factura` (con los campos que el usuario corrigió) y cada llamada `ia:vision_*`.
+- **Medición:** cada factura guarda `datos_ia` (lo que leyó la IA); al confirmarla se registran las correcciones. Esto alimenta el % de aciertos por campo (Fase 5).
+- **Endpoints:** `POST /api/vision/invoices` (archivo + `consentimiento`), `GET /api/vision/invoices?estado=`, `GET /api/vision/invoices/{id}`, `POST /api/vision/invoices/{id}/confirm`.
+- **Base de datos existente:** ejecutar `migrations/003_vision_facturas.sql`.
+- **Tesseract en local (Windows):** instalar desde https://github.com/UB-Mannheim/tesseract/wiki con el idioma español. En Docker/Render ya viene instalado.
+
 ## Despliegue
 Dockerfile incluido. En Render: Web Service (Docker); el scheduler interno ejecuta la indexación. Si el servicio se duerme, un Cron Job puede llamar a `/api/admin/run-indexer` con `X-Cron-Token`. Supabase para DB + Storage.
 
