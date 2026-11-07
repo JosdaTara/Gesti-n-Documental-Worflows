@@ -114,8 +114,8 @@ def test_agota_reintentos_y_propaga():
 
 def test_indexar_documento_ok(db, monkeypatch):
     monkeypatch.setattr(indexing_service, "_embed", lambda chunks: [[0.0] * 3 for _ in chunks])
-    monkeypatch.setattr(indexing_service, "_gemini_json",
-                        lambda p: '{"categoria":"Informe","resumen":"r","datos":{}}')
+    monkeypatch.setattr(indexing_service, "_llm_json",
+                        lambda p: {"categoria": "Informe", "resumen": "r", "datos": {}})
     d = _doc_pendiente(db)
     res = indexing_service.index_one(db, str(d.id), "test")
     db.refresh(d)
@@ -139,7 +139,7 @@ def test_indexar_documento_falla_marca_error(db, monkeypatch):
 def test_barrido_cuenta_procesados_y_errores(db, monkeypatch):
     db.query(Documento).filter(Documento.estado == "pendiente").update({"estado": "procesado"})
     db.commit()
-    monkeypatch.setattr(indexing_service, "_gemini_json", lambda p: '{"categoria":"Otro"}')
+    monkeypatch.setattr(indexing_service, "_llm_json", lambda p: {"categoria": "Otro"})
 
     def embed(chunks):
         if "falla" in chunks[0]:

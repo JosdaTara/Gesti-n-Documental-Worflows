@@ -101,3 +101,14 @@ class Auditoria(Base):
     detalle = Column(JSON)
     ip = Column(String(60))
     fecha = Column(DateTime(timezone=True), server_default=func.now())
+
+class Conversacion(Base):
+    """Memoria del chatbot: mensajes por usuario y sesión de chat."""
+    __tablename__ = "conversaciones"
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    sesion = Column(String(80), nullable=False, index=True)
+    rol = Column(String(12), nullable=False)        # user | assistant
+    contenido = Column(Text, nullable=False)
+    proveedor = Column(String(20))                  # modelo que respondió (solo assistant)
+    fecha = Column(DateTime(timezone=True), server_default=func.now())

@@ -37,6 +37,16 @@ Ver `.env.example`.
 - **Errores controlados:** si un documento falla queda en estado `error` con el detalle; el barrido continúa con los demás. Los documentos en `error` no se reprocesan solos (para no agotar la cuota gratuita); se reprocesan con Reintentar.
 - **Cron externo (opcional):** `POST /api/admin/run-indexer` con cabecera `X-Cron-Token: $CRON_SECRET`.
 
+## IA gratuita con plan B y chatbot (Fase 2)
+- **Capa única de IA** (`app/services/llm.py`): todas las tareas de IA (clasificar documentos, responder RAG, chatbot) pasan por `con_fallback`, que prueba los proveedores en el orden de `LLM_PROVIDERS`: **Gemini → Groq → Ollama**. Solo se usan los que tengan clave/URL.
+- **Si todos fallan** (cuota agotada, sin red): la API responde **503** con un mensaje claro y la ejecución queda registrada con el error. Los documentos que no se pudieron clasificar quedan en `error` para reintentarlos.
+- **Embeddings:** Gemini `gemini-embedding-001` (768 dims) con `google-genai`. No tienen fallback a otro proveedor porque vectores de modelos distintos no son comparables.
+- **Chatbot** (`app/services/chatbot.py`): agente de LangChain/LangGraph (`create_agent`) con herramientas `buscar_documentos` (RAG), `listar_documentos` y `consultar_facturas`. Memoria persistente por usuario y sesión en la tabla `conversaciones` (últimos `CHAT_HISTORY_TURNS` mensajes).
+- **Auditoría:** cada llamada a la IA se registra en `auditoria` (acción `ia:*`) con proveedor, modelo, proveedores que fallaron antes, herramientas usadas, entrada y salida recortadas y duración.
+- **Endpoints:** `POST /api/chat` (chatbot), `GET|DELETE /api/chat/historial?sesion=`, `POST /api/rag/consultar` (WF3 original, sin memoria), `GET /health` (muestra los proveedores de IA activos).
+- **Frontend:** `app/static/index.html` ya habla con la API (antes llamaba a los webhooks de n8n). Se abre en `http://localhost:8000/`.
+- **Base de datos existente:** ejecutar `migrations/002_conversaciones.sql`.
+
 ## Despliegue
 Dockerfile incluido. En Render: Web Service (Docker); el scheduler interno ejecuta la indexación. Si el servicio se duerme, un Cron Job puede llamar a `/api/admin/run-indexer` con `X-Cron-Token`. Supabase para DB + Storage.
 

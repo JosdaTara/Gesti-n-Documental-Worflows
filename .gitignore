@@ -9,3 +9,4 @@ uploads/
 .vscode/
 tests/test.db
 *.db
+.claude/

@@ -75,7 +75,7 @@ dt{font-weight:600;margin-top:.5rem}dd{margin:0}
     <p id="hint" class="mu"></p>
     <p id="lerr" class="err-t"></p>
     <button class="pr">Iniciar sesión</button>
-    <button type="button" class="ln" onclick="cfgOpen()">Configurar conexión con n8n</button>
+    <button type="button" class="ln" onclick="cfgOpen()">Configurar conexión</button>
   </form>
 </div>
 
@@ -146,10 +146,9 @@ dt{font-weight:600;margin-top:.5rem}dd{margin:0}
 <dialog id="dlg"><div id="dt"></div></dialog>
 
 <dialog id="cfg">
-  <h3>Conexión con n8n</h3>
-  <label>URL del webhook "gestion-documental"<input id="curl" placeholder="https://tu-n8n.com/webhook/gestion-documental"></label>
-  <label>URL del webhook del agente RAG (buscar y preguntar)<input id="curlrag" placeholder="https://tu-n8n.com/webhook/agente-rag"></label>
-  <label style="font-weight:400"><input id="cdemo" type="checkbox" style="width:auto"> Modo demo (datos de ejemplo, sin n8n)</label>
+  <h3>Conexión con el servidor</h3>
+  <label>URL de la API (vacío = este mismo servidor)<input id="curl" placeholder="https://tu-app.onrender.com"></label>
+  <label style="font-weight:400"><input id="cdemo" type="checkbox" style="width:auto"> Modo demo (datos de ejemplo, sin servidor)</label>
   <div class="row" style="margin-top:1rem"><button onclick="cfg.close()">Cancelar</button><button class="pr" id="csave">Guardar</button></div>
 </dialog>
 
@@ -158,20 +157,32 @@ dt{font-weight:600;margin-top:.5rem}dd{margin:0}
 <script>
 const $=s=>document.querySelector(s);
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const S={token:'',user:'',rol:'',docs:[],repos:[],cfg:{url:'',urlRag:'',demo:true},sesion:(self.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)};
-try{Object.assign(S.cfg,JSON.parse(localStorage.getItem('gd_cfg')||'{}'))}catch(e){}
+const S={token:'',user:'',rol:'',docs:[],repos:[],cfg:{url:'',demo:false},sesion:(self.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)};
+try{const c=JSON.parse(localStorage.getItem('gd_cfg2')||'{}');Object.assign(S.cfg,{url:c.url||'',demo:!!c.demo})}catch(e){}
 
-/* ---------- Capa de conexión con n8n ----------
-   Un solo webhook (POST) que recibe {accion, ...datos}; en la subida va como multipart con el campo "file". */
+/* ---------- Capa de conexión con la API (FastAPI) ----------
+   Traduce cada acción de la interfaz (las mismas que tenía el webhook de n8n) a su endpoint REST. */
+const RUTAS={
+  login:d=>['POST','/api/auth/login',{usuario:d.usuario,clave:d.clave}],
+  listar:()=>['GET','/api/documents'],
+  crear_repo:d=>['POST','/api/repositories',{nombre:d.nombre}],
+  subir:()=>['POST','/api/documents'],
+  eliminar:d=>['DELETE','/api/documents/'+encodeURIComponent(d.id)],
+  reintentar:d=>['POST','/api/documents/'+encodeURIComponent(d.id)+'/retry'],
+  descargar:d=>['GET','/api/documents/'+encodeURIComponent(d.id)+'/download'],
+  buscar:d=>['POST','/api/search',{q:d.q,repo:d.repo||''}],
+  consultar:d=>['POST','/api/chat',{pregunta:d.pregunta,repo:d.repo||'',sesion:d.sesion}]
+};
 async function api(accion,datos={},file){
-  if(S.cfg.demo||!S.cfg.url)return mock(accion,datos,file);
-  const rag=(accion==='buscar'||accion==='consultar');
-  const base=(rag&&S.cfg.urlRag)?S.cfg.urlRag:S.cfg.url;
-  const o={method:'POST',headers:{Authorization:'Bearer '+S.token}};
-  if(file){const f=new FormData();f.append('accion',accion);for(const k in datos)f.append(k,datos[k]);f.append('file',file);o.body=f}
-  else{o.headers['Content-Type']='application/json';o.body=JSON.stringify({accion,...datos})}
-  const r=await fetch(base,o);
-  if(!r.ok){let m='';try{m=(await r.json()).error}catch(e){}throw new Error(m||'El servidor respondió '+r.status)}
+  if(S.cfg.demo)return mock(accion,datos,file);
+  const [method,path,body]=RUTAS[accion](datos);
+  const o={method,headers:{}};
+  if(S.token)o.headers.Authorization='Bearer '+S.token;
+  if(file){const f=new FormData();for(const k in datos)f.append(k,datos[k]);f.append('file',file);o.body=f}
+  else if(body){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body)}
+  const r=await fetch((S.cfg.url||'').replace(/\/$/,'')+path,o);
+  if(r.status===401&&accion!=='login'){S.token='';$('#app').hidden=true;$('#login').hidden=false;throw new Error('La sesión venció. Ingresa de nuevo.')}
+  if(!r.ok){let m='';try{const j=await r.json();m=typeof j.detail==='string'?j.detail:(j.error||'')}catch(e){}throw new Error(m||'El servidor respondió '+r.status)}
   return r.json();
 }
 
@@ -194,19 +205,19 @@ async function mock(a,d,f){
   if(a==='reintentar'){const x=DB.docs.find(x=>x.id==d.id);if(x)Object.assign(x,{estado:'procesado',categoria:'Informe',resumen:'Reprocesado (demo).',datos:{}});return{ok:true}}
   if(a==='descargar')return{url:''};
   if(a==='buscar')return{resultados:DB.docs.filter(x=>(x.resumen||'').toLowerCase().includes(d.q.toLowerCase())).map(x=>({archivo:x.nombre,pagina:1,fragmento:x.resumen}))};
-  if(a==='consultar')return{respuesta:'Respuesta de demostración. Con n8n conectado, aquí responde Gemini usando los fragmentos recuperados de Qdrant.',fuentes:[{archivo:DB.docs[0].nombre,pagina:2}]};
+  if(a==='consultar')return{respuesta:'Respuesta de demostración. Conectado al servidor, aquí responde el asistente usando los documentos.',fuentes:[{archivo:DB.docs[0].nombre,pagina:2}]};
 }
 
 /* ---------- Utilidades de interfaz ---------- */
 function toast(m,err){const t=$('#toast');t.textContent=m;t.className='show'+(err?' err':'');clearTimeout(toast.t);toast.t=setTimeout(()=>t.className='',3500)}
 function tab(t){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='t-'+t));document.querySelectorAll('#nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
 $('#nav').onclick=e=>{const b=e.target.closest('[data-t]');if(b)tab(b.dataset.t)};
-function cfgOpen(){$('#curl').value=S.cfg.url;$('#curlrag').value=S.cfg.urlRag||'';$('#cdemo').checked=S.cfg.demo;$('#cfg').showModal()}
-$('#csave').onclick=()=>{S.cfg={url:$('#curl').value.trim(),urlRag:$('#curlrag').value.trim(),demo:$('#cdemo').checked};try{localStorage.setItem('gd_cfg',JSON.stringify(S.cfg))}catch(e){}
+function cfgOpen(){$('#curl').value=S.cfg.url;$('#cdemo').checked=S.cfg.demo;$('#cfg').showModal()}
+$('#csave').onclick=()=>{S.cfg={url:$('#curl').value.trim(),demo:$('#cdemo').checked};try{localStorage.setItem('gd_cfg2',JSON.stringify(S.cfg))}catch(e){}
   $('#cfg').close();hint();toast(S.cfg.demo?'Modo demo activado':'Conexión guardada');if(S.token)load()};
 
 /* ---------- Sesión ---------- */
-function hint(){$('#hint').textContent=(S.cfg.demo||!S.cfg.url)?'Modo demo activo: escribe cualquier usuario y contraseña.':'Conectado a: '+S.cfg.url+(S.cfg.urlRag?' · Agente: '+S.cfg.urlRag:'')}
+function hint(){$('#hint').textContent=S.cfg.demo?'Modo demo activo: escribe cualquier usuario y contraseña.':'Conectado a: '+(S.cfg.url||location.origin)}
 hint();
 $('#lf').onsubmit=async e=>{e.preventDefault();$('#lerr').textContent='';
   try{const r=await api('login',{usuario:$('#u').value,clave:$('#p').value});
@@ -298,7 +309,7 @@ function msg(t,txt){const m=document.createElement('div');m.className='m '+t;m.t
 msg('a','Hola. Pregúntame sobre el contenido de los documentos; responderé citando el archivo y la página.');
 $('#cf').onsubmit=async e=>{e.preventDefault();const q=$('#cq').value.trim();if(!q)return;$('#cq').value='';msg('u',q);const w=msg('a','Buscando en los documentos…');
   try{const r=await api('consultar',{pregunta:q,repo:$('#crepo').value,sesion:S.sesion});w.textContent=r.respuesta;
-    if((r.fuentes||[]).length){const s=document.createElement('small');s.textContent='Fuentes: '+r.fuentes.map(f=>f.archivo+(f.pagina?' (p. '+f.pagina+')':'')).join('; ');w.append(s)}}
+    const det=[];if((r.fuentes||[]).length)det.push('Fuentes: '+r.fuentes.map(f=>f.archivo+(f.pagina?' (p. '+f.pagina+')':'')).join('; '));if(r.proveedor)det.push('Modelo: '+r.proveedor);if(det.length){const s=document.createElement('small');s.textContent=det.join(' · ');w.append(s)}}
   catch(x){w.textContent='No se pudo responder: '+x.message}$('#chat').scrollTop=1e6};
 </script>
 </body>

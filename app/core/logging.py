@@ -75,6 +75,8 @@ def log_execution(db: Session, flujo: str, disparador: str = "manual", entrada=N
 
 def _es_reintentable(e: BaseException) -> bool:
     # Errores de validación o de datos no se arreglan reintentando.
+    if getattr(e, "reintentable", True) is False:
+        return False
     return not isinstance(e, (HTTPException, ValueError, KeyError, TypeError))
 
 

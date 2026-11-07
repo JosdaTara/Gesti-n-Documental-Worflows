@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    OLLAMA_BASE_URL: str = ""          # p. ej. http://localhost:11434 (vacío = desactivado)
+    OLLAMA_MODEL: str = "llama3.1"
+    LLM_PROVIDERS: str = "gemini,groq,ollama"   # orden del plan B
+    CHAT_HISTORY_TURNS: int = 10       # mensajes previos que recuerda el chatbot
     EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
     JWT_SECRET: str = "change-me"

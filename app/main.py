@@ -1,11 +1,13 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.db import Base, engine, SessionLocal
 from app.api.routers import admin, auth, documents, search, vision
+from app.services.llm import LLMNoDisponible, proveedores_configurados
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -44,6 +46,17 @@ except Exception:
     pass
 
 
+@app.exception_handler(LLMNoDisponible)
+async def _ia_no_disponible(_: Request, e: LLMNoDisponible):
+    # Plan B final: respuesta clara al usuario cuando ningún modelo gratuito responde.
+    return JSONResponse(status_code=503, content={"detail": str(e)})
+
+
+@app.get("/", include_in_schema=False)
+def inicio():
+    return RedirectResponse("/static/index.html")
+
+
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "ia": proveedores_configurados()}

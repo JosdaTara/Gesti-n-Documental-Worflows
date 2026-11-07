@@ -4,6 +4,7 @@ from app.models import Documento, Chunk, Repositorio
 from app.services import storage
 from app.core.config import settings
 from app.core.logging import log_execution, con_reintentos
+from app.services import llm
 
 def _extract_text(data: bytes, nombre: str) -> str:
     ext = nombre.rsplit(".", 1)[-1].lower()
@@ -24,34 +25,25 @@ def _chunk(text: str, size=1000, overlap=150):
         i += size - overlap
     return [c for c in out if c.strip()]
 
-@con_reintentos
 def _embed(texts):
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    res = genai.embed_content(model=f"models/{settings.EMBEDDING_MODEL}", content=texts,
-                              task_type="retrieval_document", output_dimensionality=settings.EMBEDDING_DIM)
-    return res["embedding"]
+    return llm.embed(texts, "RETRIEVAL_DOCUMENT")
 
 
-@con_reintentos
-def _gemini_json(prompt: str) -> str:
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    m = genai.GenerativeModel(settings.GEMINI_MODEL)
-    r = m.generate_content(prompt, generation_config={"response_mime_type": "application/json", "temperature": 0.2})
-    return r.text
+def _llm_json(prompt: str) -> dict:
+    """Clasificación con plan B (Gemini → Groq → Ollama)."""
+    datos, _proveedor = llm.invocar_json(prompt, accion="clasificar_documento")
+    return datos
 
 
 def _classify(text: str) -> dict:
     prompt = ("Clasifica y resume este documento. Devuelve SOLO JSON valido con claves "
               "categoria (Contrato|Factura|Informe|Otro), resumen (2-3 frases) y datos (objeto con hasta 5 campos).\n\n"
               + text[:8000])
-    raw = _gemini_json(prompt)  # si la IA no responde tras los reintentos, el error sube
     try:
-        o = json.loads(raw)
+        o = _llm_json(prompt)  # si ningún modelo responde, LLMNoDisponible sube y el doc queda en error
         return {"categoria": o.get("categoria", "Otro"), "resumen": o.get("resumen", ""),
                 "datos": o.get("datos", {}), "detalle": ""}
-    except Exception as e:
+    except ValueError as e:
         return {"categoria": "", "resumen": "", "datos": {}, "detalle": f"Respuesta de la IA no valida: {e}"}
 
 

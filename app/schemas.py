@@ -50,6 +50,8 @@ class ConsultarIn(BaseModel):
 class ConsultarOut(BaseModel):
     respuesta: str
     fuentes: List[Dict[str, Any]] = []
+    proveedor: Optional[str] = None   # modelo de IA que respondió (gemini|groq|ollama)
+    sesion: Optional[str] = None
 
 class VisionItem(BaseModel):
     descripcion: str
