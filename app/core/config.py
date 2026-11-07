@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str = ""
     SUPABASE_BUCKET: str = "documentos"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     OLLAMA_BASE_URL: str = ""          # p. ej. http://localhost:11434 (vacío = desactivado)

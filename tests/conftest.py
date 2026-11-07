@@ -13,3 +13,9 @@ os.environ["SCHEDULER_ENABLED"] = "false"
 os.environ["RETRY_WAIT_SECONDS"] = "0"
 os.environ["RETRY_ATTEMPTS"] = "3"
 os.environ["CRON_SECRET"] = "cron-test"
+
+# Tablas creadas para cualquier archivo de pruebas, aunque no importe la app.
+from app.core.db import Base, engine  # noqa: E402
+import app.models  # noqa: E402,F401
+
+Base.metadata.create_all(bind=engine)

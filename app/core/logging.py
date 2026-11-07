@@ -77,6 +77,11 @@ def _es_reintentable(e: BaseException) -> bool:
     # Errores de validación o de datos no se arreglan reintentando.
     if getattr(e, "reintentable", True) is False:
         return False
+    # Errores permanentes de la API (clave inválida, sin permiso, modelo inexistente, petición mal
+    # formada): reintentar no los arregla y gasta tiempo y cuota. 429 (cuota) y 5xx sí se reintentan.
+    codigo = getattr(e, "status_code", None) or getattr(e, "code", None)
+    if codigo in (400, 401, 403, 404):
+        return False
     return not isinstance(e, (HTTPException, ValueError, KeyError, TypeError))
 
 

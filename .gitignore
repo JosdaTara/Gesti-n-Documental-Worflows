@@ -10,3 +10,8 @@ uploads/
 tests/test.db
 *.db
 .claude/
+
+# Evaluacion de vision: las fotos reales pueden tener datos personales (Ley 1581)
+evaluacion/
+.coverage
+htmlcov/

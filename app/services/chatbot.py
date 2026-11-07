@@ -147,7 +147,9 @@ def responder(db: Session, usuario_id: int, pregunta: str, sesion: str | None = 
             agente = create_agent(modelo, herramientas, system_prompt=SISTEMA.format(filtro=filtro))
             return agente.invoke({"messages": mensajes}, config={"recursion_limit": 8})
 
-        estado, proveedor, fallos = llm.con_fallback(ejecutar)
+        # una sola vez por proveedor: en una conversación es mejor pasar rápido al siguiente
+        # que repetir el agente completo (puede tardar más de un minuto si el servicio está lento)
+        estado, proveedor, fallos = llm.con_fallback(ejecutar, intentos=1)
         nuevos = estado["messages"][len(mensajes):]
         usadas = [m.name for m in nuevos if isinstance(m, ToolMessage)]
         respuesta = llm.texto_de(estado["messages"][-1]) or "No tengo una respuesta para eso."

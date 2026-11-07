@@ -181,3 +181,22 @@ def test_listar_ejecuciones_filtra(db):
     filas = r.json()["ejecuciones"]
     assert filas and all(f["error"] for f in filas)
     assert client.get("/api/admin/ejecuciones", headers=_usuario(db, "ana", "usuario")).status_code == 403
+
+
+def test_no_reintenta_errores_permanentes_de_la_api():
+    """Un 404 (modelo retirado) o 401 (clave inválida) no se arregla reintentando; un 429 sí."""
+    class ErrorApi(Exception):
+        def __init__(self, code):
+            super().__init__(f"HTTP {code}"); self.code = code
+
+    for codigo, esperado in ((404, 1), (401, 1), (429, 3), (503, 3)):
+        llamadas = {"n": 0}
+
+        @con_reintentos
+        def llamar():
+            llamadas["n"] += 1
+            raise ErrorApi(codigo)
+
+        with pytest.raises(ErrorApi):
+            llamar()
+        assert llamadas["n"] == esperado, codigo

@@ -79,7 +79,8 @@ def crear_modelo(proveedor: str, temperatura: float = 0.2, vision: bool = False)
 
 
 def con_fallback(tarea: Callable[[object], T], *, temperatura: float = 0.2,
-                 proveedores: list[str] | None = None, vision: bool = False) -> tuple[T, str, list[str]]:
+                 proveedores: list[str] | None = None, vision: bool = False,
+                 intentos: int = 2) -> tuple[T, str, list[str]]:
     """Ejecuta `tarea(modelo)` con cada proveedor en orden hasta que uno funcione.
 
     Devuelve (resultado, proveedor_usado, fallos_previos).
@@ -91,7 +92,7 @@ def con_fallback(tarea: Callable[[object], T], *, temperatura: float = 0.2,
     for p in proveedores:
         try:
             modelo = crear_modelo(p, temperatura, vision) if vision else crear_modelo(p, temperatura)
-            resultado = con_reintentos(intentos=2)(tarea)(modelo)
+            resultado = con_reintentos(intentos=intentos)(tarea)(modelo)
             if fallos:
                 log.warning("Plan B: respondió %s tras fallar %s", p, fallos)
             return resultado, p, fallos

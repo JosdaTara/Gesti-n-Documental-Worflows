@@ -3,7 +3,7 @@
 Automatización propia en código (FastAPI) + módulo de visión (facturas), migrado desde n8n.
 
 ## Stack
-Python 3.12 + FastAPI, PostgreSQL (Supabase) + pgvector, Supabase Storage, Gemini 2.5 Flash, LangChain/LangGraph, APScheduler, Tesseract, JWT + bcrypt. Despliegue en Render.
+Python 3.12 + FastAPI, PostgreSQL (Supabase) + pgvector, Supabase Storage, Gemini (gemini-3.8-flash) con plan B Groq y Ollama, LangChain/LangGraph, APScheduler, Tesseract, JWT + bcrypt. Despliegue en Render.
 
 ## Requisitos
 - Python 3.12
@@ -100,7 +100,17 @@ La matriz está en `app/core/security.py` (`PERMISOS`). El usuario se consulta e
 ## Despliegue
 Dockerfile incluido. En Render: Web Service (Docker); el scheduler interno ejecuta la indexación. Si el servicio se duerme, un Cron Job puede llamar a `/api/admin/run-indexer` con `X-Cron-Token`. Supabase para DB + Storage.
 
-## Pruebas
+## Pruebas (Fase 5)
 ```bash
-pytest -q
+pytest -q                                  # 92 pruebas, sin internet ni claves (IA simulada)
+pytest -q --cov=app --cov=scripts          # cobertura: 88 %
 ```
+Detalle de qué cubre cada archivo, el plan B y los criterios de acierto: [`docs/pruebas.md`](docs/pruebas.md).
+
+### Evaluación del módulo de visión con fotos reales (≥ 20)
+```bash
+python scripts/evaluar_vision.py plantilla evaluacion/fotos      # crea verdad.csv para llenar a mano
+python scripts/evaluar_vision.py evaluar evaluacion/fotos --consentimiento
+python scripts/evaluar_vision.py bd                              # aciertos según facturas confirmadas en la app
+```
+Genera `reporte.md` con % de aciertos por campo, calibración de la confianza y facturas que se habrían validado con error. La carpeta `evaluacion/` no se sube a Git (las fotos pueden tener datos personales).
