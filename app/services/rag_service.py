@@ -1,8 +1,11 @@
+"""WF3: agente RAG (antes webhook de n8n con acciones `buscar` y `consultar`)."""
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.models import Chunk, Documento, Repositorio
 from app.core.config import settings
+from app.core.logging import log_execution, con_reintentos
 
+
+@con_reintentos
 def _embed_query(q: str):
     import google.generativeai as genai
     genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -11,7 +14,17 @@ def _embed_query(q: str):
     v = r["embedding"]
     return v[0] if isinstance(v[0], list) else v
 
-def search(db: Session, q: str, repo: str = ""):
+
+@con_reintentos
+def _generar(prompt: str) -> str:
+    import google.generativeai as genai
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    m = genai.GenerativeModel(settings.GEMINI_MODEL)
+    r = m.generate_content(prompt, generation_config={"temperature": 0.3})
+    return (r.text or "").strip()
+
+
+def _buscar(db: Session, q: str, repo: str = ""):
     vec = _embed_query(q)
     sql = """SELECT c.contenido, d.nombre, d.id::text, r.nombre AS repo
              FROM chunks c JOIN documentos d ON d.id=c.documento_id
@@ -21,21 +34,25 @@ def search(db: Session, q: str, repo: str = ""):
     rows = db.execute(text(sql), {"vec": str(vec), "repo": repo or ""}).fetchall()
     return [{"archivo": r.nombre, "fragmento": (r.contenido or "")[:600], "pagina": None} for r in rows]
 
-def answer(db: Session, pregunta: str, repo: str = ""):
-    hits = search(db, pregunta, repo)
-    if not hits:
-        return {"respuesta": "No encontré fragmentos relevantes en los documentos.", "fuentes": []}
-    ctx = "\n\n".join(f"[{i+1}] Archivo: {h['archivo']}\n{h['fragmento']}" for i, h in enumerate(hits))
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    m = genai.GenerativeModel(settings.GEMINI_MODEL)
-    prompt = ("Eres el asistente de un repositorio documental. Responde en español usando SOLO los fragmentos. "
-              "Si la respuesta no está, dilo con claridad.\n\nFragmentos:\n" + ctx + "\n\nPregunta: " + pregunta)
-    r = m.generate_content(prompt, generation_config={"temperature": 0.3})
-    fuentes = [{"archivo": h["archivo"]} for h in hits]
-    # dedup
-    seen = set(); uniq = []
-    for f in fuentes:
-        if f["archivo"] not in seen:
-            seen.add(f["archivo"]); uniq.append(f)
-    return {"respuesta": (r.text or "").strip(), "fuentes": uniq}
+
+def search(db: Session, q: str, repo: str = "", usuario_id: int | None = None):
+    with log_execution(db, "rag_buscar", "web", {"q": q, "repo": repo, "usuario_id": usuario_id}) as rec:
+        hits = _buscar(db, q, repo)
+        rec.resultado = {"resultados": len(hits)}
+        return hits
+
+
+def answer(db: Session, pregunta: str, repo: str = "", usuario_id: int | None = None):
+    with log_execution(db, "rag_consultar", "web",
+                       {"pregunta": pregunta, "repo": repo, "usuario_id": usuario_id}) as rec:
+        hits = _buscar(db, pregunta, repo)
+        if not hits:
+            rec.resultado = {"fuentes": 0}
+            return {"respuesta": "No encontré fragmentos relevantes en los documentos.", "fuentes": []}
+        ctx = "\n\n".join(f"[{i+1}] Archivo: {h['archivo']}\n{h['fragmento']}" for i, h in enumerate(hits))
+        prompt = ("Eres el asistente de un repositorio documental. Responde en español usando SOLO los fragmentos. "
+                  "Si la respuesta no está, dilo con claridad.\n\nFragmentos:\n" + ctx + "\n\nPregunta: " + pregunta)
+        respuesta = _generar(prompt)
+        uniq = list(dict.fromkeys(h["archivo"] for h in hits))
+        rec.resultado = {"fuentes": len(uniq)}
+        return {"respuesta": respuesta, "fuentes": [{"archivo": a} for a in uniq]}

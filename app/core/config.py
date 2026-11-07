@@ -18,5 +18,10 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:5500,http://localhost:8000"
     INDEXER_CRON_MINUTES: int = 5
     CONFIDENCE_THRESHOLD: float = 0.85
+    # Motor de automatización
+    SCHEDULER_ENABLED: bool = True
+    RETRY_ATTEMPTS: int = 3
+    RETRY_WAIT_SECONDS: float = 1.0
+    CRON_SECRET: str = ""   # token para disparar el indexador desde un cron externo
 
 settings = Settings()

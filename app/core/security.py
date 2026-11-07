@@ -32,3 +32,11 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer),
     except JWTError:
         raise HTTPException(status_code=401, detail="Sesión no válida o vencida")
     return {"id": int(payload["sub"]), "usuario": payload["usuario"], "rol": payload["rol"]}
+
+def require_role(*roles: str):
+    """Dependencia: exige que el usuario autenticado tenga uno de los roles dados."""
+    def _check(u=Depends(get_current_user)):
+        if u["rol"] not in roles:
+            raise HTTPException(status_code=403, detail="No tiene permisos para esta acción")
+        return u
+    return _check

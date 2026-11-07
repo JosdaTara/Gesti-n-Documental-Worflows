@@ -9,8 +9,8 @@ router = APIRouter(prefix="/api", tags=["search"])
 
 @router.post("/search", response_model=BuscarOut)
 def buscar(body: BuscarIn, db: Session = Depends(get_db), u=Depends(get_current_user)):
-    return {"resultados": rag_service.search(db, body.q, body.repo or "")}
+    return {"resultados": rag_service.search(db, body.q, body.repo or "", u["id"])}
 
 @router.post("/chat", response_model=ConsultarOut)
 def chat(body: ConsultarIn, db: Session = Depends(get_db), u=Depends(get_current_user)):
-    return rag_service.answer(db, body.pregunta, body.repo or "")
+    return rag_service.answer(db, body.pregunta, body.repo or "", u["id"])

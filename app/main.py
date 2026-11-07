@@ -1,11 +1,31 @@
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
-from app.core.db import Base, engine
-from app.api.routers import auth, documents, search, vision
+from app.core.db import Base, engine, SessionLocal
+from app.api.routers import admin, auth, documents, search, vision
 
-app = FastAPI(title="Gestión Documental con IA", version="0.1.0")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    from app.services.auth_service import bootstrap_admin
+    from app.workers import scheduler
+    db = SessionLocal()
+    try:
+        bootstrap_admin(db)
+    finally:
+        db.close()
+    if settings.SCHEDULER_ENABLED:
+        scheduler.start()
+    yield
+    scheduler.shutdown()
+
+
+app = FastAPI(title="Gestión Documental con IA", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware, allow_origins=settings.ALLOWED_ORIGINS.split(","),
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -16,23 +36,13 @@ app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(vision.router)
+app.include_router(admin.router)
 
 try:
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
 except Exception:
     pass
 
-@app.on_event("startup")
-def _startup():
-    from app.services.auth_service import bootstrap_admin
-    from app.core.db import SessionLocal
-    db = SessionLocal()
-    try:
-        bootstrap_admin(db)
-        from app.workers.scheduler import start
-        start()
-    finally:
-        db.close()
 
 @app.get("/health")
 def health():

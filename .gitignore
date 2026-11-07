@@ -7,3 +7,5 @@ uploads/
 .pytest_cache/
 .idea/
 .vscode/
+tests/test.db
+*.db
