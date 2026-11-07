@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.db import Base, engine, SessionLocal
-from app.api.routers import admin, auth, documents, search, vision
+from app.api.routers import admin, alerts, auth, documents, search, vision
 from app.services.llm import LLMNoDisponible, proveedores_configurados
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -14,8 +14,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    from app.services.auth_service import bootstrap_admin
+    from app.services.auth_service import bootstrap_admin, validar_configuracion_produccion
     from app.workers import scheduler
+    validar_configuracion_produccion()
     db = SessionLocal()
     try:
         bootstrap_admin(db)
@@ -39,6 +40,7 @@ app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(vision.router)
 app.include_router(admin.router)
+app.include_router(alerts.router)
 
 try:
     app.mount("/static", StaticFiles(directory="app/static"), name="static")

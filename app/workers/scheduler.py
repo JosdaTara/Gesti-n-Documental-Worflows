@@ -9,12 +9,16 @@ _sched: BackgroundScheduler | None = None
 
 
 def _job():
+    from app.services.automatizacion_facturas import barrido_pendientes
     from app.services.indexing_service import sweep_pending
     db = SessionLocal()
     try:
-        sweep_pending(db, "cron")
-    except Exception:
-        log.exception("Fallo el barrido de indexación")
+        for nombre, tarea in (("indexación", sweep_pending), ("facturas", barrido_pendientes)):
+            try:
+                tarea(db, "cron")
+            except Exception:
+                db.rollback()
+                log.exception("Falló el barrido de %s", nombre)
     finally:
         db.close()
 

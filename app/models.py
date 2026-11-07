@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, Text, Float, BigInteger, Date, DateTime, ForeignKey, JSON
+from sqlalchemy import Boolean, Column, Integer, String, Text, Float, BigInteger, Date, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -10,7 +10,8 @@ class Usuario(Base):
     id = Column(Integer, primary_key=True)
     usuario = Column(String(80), unique=True, nullable=False)
     clave_hash = Column(String(255), nullable=False)
-    rol = Column(String(20), nullable=False, default="usuario")
+    rol = Column(String(20), nullable=False, default="operador")   # admin | operador | consulta
+    activo = Column(Boolean, nullable=False, default=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
 class Sesion(Base):
@@ -73,6 +74,7 @@ class Factura(Base):
     estado = Column(String(20), nullable=False, default="por_confirmar")  # por_confirmar|validada|confirmada
     revisado_por = Column(Integer, ForeignKey("usuarios.id"))
     revisado_en = Column(DateTime(timezone=True))
+    procesada_en = Column(DateTime(timezone=True))   # cuándo la tomó el flujo procesar_factura
     creado_por = Column(Integer, ForeignKey("usuarios.id"))
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -120,3 +122,29 @@ class Conversacion(Base):
     contenido = Column(Text, nullable=False)
     proveedor = Column(String(20))                  # modelo que respondió (solo assistant)
     fecha = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Proveedor(Base):
+    """Proveedores conocidos (se crean automáticamente con la primera factura)."""
+    __tablename__ = "proveedores"
+    id = Column(Integer, primary_key=True)
+    nit = Column(String(40), unique=True, nullable=False)
+    nombre = Column(String(255), nullable=False)
+    facturas = Column(Integer, nullable=False, default=0)
+    total_compras = Column(Float, nullable=False, default=0.0)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Alerta(Base):
+    """Alertas generadas por los flujos de automatización para que un humano las atienda."""
+    __tablename__ = "alertas"
+    id = Column(Integer, primary_key=True)
+    tipo = Column(String(40), nullable=False)       # proveedor_nuevo | monto_alto | monto_atipico | posible_duplicado | nit_invalido
+    severidad = Column(String(10), nullable=False, default="media")   # baja | media | alta
+    mensaje = Column(Text, nullable=False)
+    entidad = Column(String(40))
+    entidad_id = Column(String(80))
+    estado = Column(String(12), nullable=False, default="abierta")    # abierta | atendida
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
+    atendida_por = Column(Integer, ForeignKey("usuarios.id"))
+    atendida_en = Column(DateTime(timezone=True))

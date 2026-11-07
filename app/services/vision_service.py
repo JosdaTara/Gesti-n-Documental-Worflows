@@ -125,7 +125,13 @@ def extraer(entrada: Entrada, consentimiento: bool, usuario_id: int | None = Non
 # --- casos de uso -----------------------------------------------------------------
 
 def factura_out(f: Factura) -> dict:
-    return {"id": str(f.id), "imagen_id": str(f.imagen_id) if f.imagen_id else None,
+    from sqlalchemy.orm import object_session
+    from app.models import Alerta
+    s = object_session(f)
+    alertas = [{"id": a.id, "tipo": a.tipo, "severidad": a.severidad, "mensaje": a.mensaje, "estado": a.estado}
+               for a in s.query(Alerta).filter(Alerta.entidad == "factura", Alerta.entidad_id == str(f.id))
+               .order_by(Alerta.id).all()] if s else []
+    return {"alertas": alertas, "procesada": bool(f.procesada_en),"id": str(f.id), "imagen_id": str(f.imagen_id) if f.imagen_id else None,
             "proveedor": f.proveedor, "fecha": f.fecha.isoformat() if f.fecha else None, "nit": f.nit,
             "moneda": f.moneda or "COP", "items": f.items or [], "total": f.total,
             "confianza": f.confianza or 0.0, "confianza_campos": f.confianza_campos or {},
@@ -139,12 +145,13 @@ def _jsonable(ev: dict) -> dict:
             "nit": ev["nit"], "total": ev["total"], "items": ev["items"], "moneda": ev["moneda"]}
 
 
-def process_invoice(db: Session, data: bytes, mime: str, usuario_id: int, consentimiento: bool = False) -> dict:
+def process_invoice(db: Session, data: bytes, mime: str, usuario_id: int, consentimiento: bool = False,
+                    canal: str = "web") -> dict:
     if len(data) > settings.VISION_MAX_MB * 1024 * 1024:
         raise HTTPException(status_code=400, detail=f"La imagen supera los {settings.VISION_MAX_MB} MB.")
     if not data:
         raise HTTPException(status_code=400, detail="El archivo está vacío.")
-    with log_execution(db, "vision_factura", "web", {"mime": mime, "tamano": len(data), "usuario_id": usuario_id,
+    with log_execution(db, "vision_factura", canal, {"mime": mime, "tamano": len(data), "usuario_id": usuario_id,
                                                      "consentimiento": consentimiento}) as rec:
         entrada = preparar(data, mime)
         key, h = con_reintentos(storage.save_bytes)(data, mime or "application/octet-stream", "img")
@@ -172,11 +179,20 @@ def process_invoice(db: Session, data: bytes, mime: str, usuario_id: int, consen
         db.add(f); db.commit(); db.refresh(f)
         rec.resultado = {"factura_id": str(f.id), "estado": f.estado, "metodo": f.metodo,
                          "confianza": f.confianza, "fallos": r["fallos"]}
-        return factura_out(f)
+    if f.estado == "validada":   # alta confianza: la visión dispara la automatización sin pasos manuales
+        from app.services.automatizacion_facturas import disparar
+        disparar(db, str(f.id), "vision")
+        db.refresh(f)
+    return factura_out(f)
 
 
 def _puede_ver(f_o_img_dueno: int | None, usuario: dict) -> bool:
     return usuario["rol"] == "admin" or f_o_img_dueno == usuario["id"]
+
+
+def _puede_ver_factura(f: Factura, usuario: dict) -> bool:
+    from app.core.security import tiene_permiso
+    return tiene_permiso(usuario, "ver_todas_facturas") or f.creado_por == usuario["id"]
 
 
 def obtener(db: Session, factura_id: str, usuario: dict) -> Factura:
@@ -185,14 +201,15 @@ def obtener(db: Session, factura_id: str, usuario: dict) -> Factura:
         f = db.query(Factura).filter(Factura.id == uuid.UUID(str(factura_id))).first()
     except ValueError:
         f = None
-    if not f or not _puede_ver(f.creado_por, usuario):
+    if not f or not _puede_ver_factura(f, usuario):
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     return f
 
 
 def listar(db: Session, usuario: dict, estado: str | None = None, limite: int = 50) -> list[dict]:
+    from app.core.security import tiene_permiso
     q = db.query(Factura)
-    if usuario["rol"] != "admin":
+    if not tiene_permiso(usuario, "ver_todas_facturas"):
         q = q.filter(Factura.creado_por == usuario["id"])
     if estado:
         q = q.filter(Factura.estado == estado)
@@ -203,6 +220,8 @@ def confirmar(db: Session, factura_id: str, cambios: dict, usuario: dict) -> dic
     """Revisión humana: el usuario corrige los campos y confirma la factura."""
     with log_execution(db, "confirmar_factura", "web", {"factura_id": factura_id, "usuario_id": usuario["id"]}) as rec:
         f = obtener(db, factura_id, usuario)
+        if not _puede_ver(f.creado_por, usuario):
+            raise HTTPException(status_code=403, detail="Solo quien subió la factura o un administrador puede confirmarla.")
         if f.estado == "confirmada":
             raise HTTPException(status_code=409, detail="La factura ya fue confirmada.")
         fecha = normalizar_fecha(cambios.get("fecha")) if cambios.get("fecha") else None
@@ -227,7 +246,10 @@ def confirmar(db: Session, factura_id: str, cambios: dict, usuario: dict) -> dic
         auditar("confirmar_factura", usuario_id=usuario["id"], entidad="factura", entidad_id=str(f.id),
                 detalle={"correcciones": correcciones, "metodo": f.metodo, "confianza_ia": f.confianza})
         rec.resultado = {"correcciones": correcciones}
-        return factura_out(f)
+    from app.services.automatizacion_facturas import disparar
+    disparar(db, str(f.id), "confirmacion")
+    db.refresh(f)
+    return factura_out(f)
 
 
 def imagen(db: Session, imagen_id: str, usuario: dict) -> tuple[bytes, str]:

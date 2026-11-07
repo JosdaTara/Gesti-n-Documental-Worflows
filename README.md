@@ -66,6 +66,37 @@ Ver `.env.example`.
 - **Base de datos existente:** ejecutar `migrations/003_vision_facturas.sql`.
 - **Tesseract en local (Windows):** instalar desde https://github.com/UB-Mannheim/tesseract/wiki con el idioma español. En Docker/Render ya viene instalado.
 
+## Integración y seguridad (Fase 4)
+### La visión dispara la automatización
+Cuando una factura queda **validada** (alta confianza) o un usuario la **confirma**, se ejecuta el flujo `procesar_factura` (`app/services/automatizacion_facturas.py`) sin pasos manuales:
+1. Registra o actualiza el **proveedor** por NIT (tabla `proveedores`, con número de facturas y total comprado).
+2. Abre **alertas** (tabla `alertas`) según reglas de control: `proveedor_nuevo`, `nit_invalido`, `sin_nit`, `posible_duplicado`, `monto_alto` (≥ `MONTO_APROBACION`) y `monto_atipico` (> `MONTO_ATIPICO_FACTOR` × promedio del proveedor).
+3. Marca la factura como procesada (idempotente). Si el flujo falla, la factura no se pierde: el barrido periódico (`barrido_facturas`) la reintenta, o un admin con `POST /api/admin/run-invoices`.
+
+### Chatbot como canal del módulo de visión
+- Botón 📎 en el chat → `POST /api/chat/imagen`: lee la factura, dispara el flujo y responde con proveedor, total, confianza y alertas. Queda en la memoria de la conversación.
+- Nuevas herramientas del agente: `consultar_alertas` y `resumen_compras` (total por proveedor y periodo). Cada rol solo ve lo que le corresponde.
+
+### Roles y permisos
+| Permiso | admin | operador | consulta |
+|---|:-:|:-:|:-:|
+| Ver documentos, buscar, usar el chatbot | ✔ | ✔ | ✔ |
+| Subir documentos e imágenes, confirmar facturas propias | ✔ | ✔ | |
+| Ver facturas | todas | propias | todas (solo lectura) |
+| Ver imágenes originales | todas | propias | |
+| Ver alertas | ✔ | ✔ | |
+| Atender alertas, eliminar documentos, ejecutar flujos, ver ejecuciones y auditoría, gestionar usuarios | ✔ | | |
+
+La matriz está en `app/core/security.py` (`PERMISOS`). El usuario se consulta en cada petición, así que un cambio de rol o una desactivación aplica de inmediato. El frontend pide `GET /api/auth/me` y oculta lo que el rol no puede hacer (el backend lo valida igual).
+
+### Endurecimiento
+- Se eliminó `POST /api/auth/bootstrap` (era público y creaba un admin con contraseña conocida).
+- La contraseña inicial del admin sale de `ADMIN_PASSWORD`; en producción, sin ella no se crea el admin.
+- Con `APP_ENV=production` la app no arranca si `JWT_SECRET` es el de ejemplo o mide menos de 32 caracteres, o si `ALLOWED_ORIGINS` es `*`.
+- Usuarios desactivados no pueden iniciar sesión ni usar tokens ya emitidos. Cerrar sesión recarga la página para no dejar datos en memoria.
+- Auditoría de administración: `crear_usuario`, `editar_usuario`, `atender_alerta` (consulta en `GET /api/admin/auditoria`).
+- **Base de datos existente:** ejecutar `migrations/004_integracion_roles.sql` (convierte el rol heredado `usuario` en `operador`).
+
 ## Despliegue
 Dockerfile incluido. En Render: Web Service (Docker); el scheduler interno ejecuta la indexación. Si el servicio se duerme, un Cron Job puede llamar a `/api/admin/run-indexer` con `X-Cron-Token`. Supabase para DB + Storage.
 

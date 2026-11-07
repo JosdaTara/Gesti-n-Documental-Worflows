@@ -52,6 +52,7 @@ class ConsultarOut(BaseModel):
     fuentes: List[Dict[str, Any]] = []
     proveedor: Optional[str] = None   # modelo de IA que respondió (gemini|groq|ollama)
     sesion: Optional[str] = None
+    factura: Optional[Dict[str, Any]] = None   # cuando el mensaje fue una foto de factura
 
 class VisionItem(BaseModel):
     descripcion: str = ""
@@ -75,6 +76,8 @@ class FacturaOut(BaseModel):
     advertencias: List[str] = []
     creado_en: Optional[str] = None
     revisado_en: Optional[str] = None
+    procesada: bool = False          # ya pasó por el flujo procesar_factura
+    alertas: List[Dict[str, Any]] = []
 
 class FacturaEdit(BaseModel):
     proveedor: str = Field(..., min_length=1, max_length=255)
@@ -83,3 +86,14 @@ class FacturaEdit(BaseModel):
     moneda: Optional[str] = "COP"
     total: float = Field(..., gt=0)
     items: Optional[List[VisionItem]] = None
+
+
+class UsuarioCrear(BaseModel):
+    usuario: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    clave: str = Field(..., min_length=8, max_length=128)
+    rol: str = Field("operador", pattern="^(admin|operador|consulta)$")
+
+class UsuarioEditar(BaseModel):
+    rol: Optional[str] = Field(None, pattern="^(admin|operador|consulta)$")
+    activo: Optional[bool] = None
+    clave: Optional[str] = Field(None, min_length=8, max_length=128)

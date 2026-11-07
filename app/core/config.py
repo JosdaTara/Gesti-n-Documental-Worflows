@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # (solo con autorización registrada del usuario)
     VISION_PRIVACY_MODE: str = "anonimizado"
     VISION_MAX_MB: int = 10
+    # Flujo procesar_factura (reglas de control de compras)
+    MONTO_APROBACION: float = 5_000_000      # COP: desde este total la factura requiere aprobación
+    MONTO_ATIPICO_FACTOR: float = 3.0        # total > factor × promedio del proveedor
+    # Seguridad
+    ADMIN_PASSWORD: str = ""                 # contraseña inicial del admin (obligatoria en producción)
     # Motor de automatización
     SCHEDULER_ENABLED: bool = True
     RETRY_ATTEMPTS: int = 3
