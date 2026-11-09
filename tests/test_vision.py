@@ -296,3 +296,15 @@ def test_subir_archivo_invalido_o_sin_sesion(db):
     assert client.post("/api/vision/invoices", files={"file": ("a.jpg", _jpeg(), "image/jpeg")}).status_code == 401
     r = client.post("/api/vision/invoices", headers=h, files={"file": ("a.txt", b"hola", "text/plain")})
     assert r.status_code == 400
+
+
+@pytest.mark.parametrize("leido", ["ana.pruebalOcorreo.com", "ana.prueba(Ocorreo.com", "pedro©gmail.com.co", "ventas(a)tornillo.co"])
+def test_correo_mal_leido_por_el_ocr_tambien_se_oculta(leido):
+    """Caso real visto con Tesseract en Docker: la "@" se leyó como "lO" y el correo se filtraba."""
+    out, tipos = privacidad.enmascarar_texto(f"Cel 310 555 1234 {leido}")
+    assert "[CORREO]" in out and "correo" in tipos
+
+
+def test_patron_de_correo_no_tapa_datos_de_la_factura():
+    texto = "FERRETERIA EL TORNILLO S.A.S. NIT 800.197.268-4 Calle 45 # 12-30 TOTAL 65.450 Rollo lONA 3m"
+    assert privacidad.enmascarar_texto(texto) == (texto, [])

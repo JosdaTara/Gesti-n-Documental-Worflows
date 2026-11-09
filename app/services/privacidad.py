@@ -14,7 +14,12 @@ import re
 from PIL import Image, ImageDraw
 
 PATRONES = {
-    "correo": re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),
+    # El OCR lee la "@" de muchas formas ("lO", "(O", "©", "(a)"...; visto con Tesseract en Docker:
+    # "ana.pruebalOcorreo.com", "ana.prueba(Ocorreo.com"). Por eso, además del correo bien formado,
+    # se oculta cualquier palabra que termine en un dominio común. También tapa la página web de la
+    # empresa, lo cual no afecta: no es un dato que se necesite para registrar la compra.
+    "correo": re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"
+                         r"|[\w.+()©\[\]-]{2,}\.(?:com|co|net|org|edu|gov|es)(?:\.co)?\b", re.I),
     # celulares (3xx xxx xxxx) y fijos con indicativo (60x xxx xxxx), con o sin +57
     "telefono": re.compile(r"(?:\+?57[\s-]?)?(?:3\d{2}|60\d)[\s.-]?\d{3}[\s.-]?\d{4}\b"),
     # cédula precedida de C.C. / CC / cédula

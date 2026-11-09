@@ -249,6 +249,14 @@ def test_produccion_exige_secretos(monkeypatch):
     with pytest.raises(RuntimeError, match="JWT_SECRET"):
         auth_service.validar_configuracion_produccion()
     monkeypatch.setattr(auth_service.settings, "JWT_SECRET", "x" * 40)
+    monkeypatch.setattr(auth_service.settings, "DATABASE_URL", "sqlite:///./local.db")
+    with pytest.raises(RuntimeError, match="PostgreSQL"):      # SQLite no sirve en producción
+        auth_service.validar_configuracion_produccion()
+    monkeypatch.setattr(auth_service.settings, "DATABASE_URL", "postgresql+psycopg://u:p@db.supabase.co:6543/postgres")
+    with pytest.raises(RuntimeError, match="SUPABASE_URL"):     # el disco de Render no es permanente
+        auth_service.validar_configuracion_produccion()
+    monkeypatch.setattr(auth_service.settings, "SUPABASE_URL", "https://x.supabase.co")
+    monkeypatch.setattr(auth_service.settings, "SUPABASE_SERVICE_KEY", "clave")
     auth_service.validar_configuracion_produccion()
 
 

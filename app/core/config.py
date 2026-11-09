@@ -8,11 +8,14 @@ class Settings(BaseSettings):
     SUPABASE_BUCKET: str = "documentos"
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.8-flash"
+    # Segundo modelo con la misma clave: más liviano y casi siempre disponible cuando el
+    # principal responde "high demand" (503) o se demora (504). Vacío = desactivado.
+    GEMINI_FALLBACK_MODEL: str = "gemini-3.5-flash-lite"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     OLLAMA_BASE_URL: str = ""          # p. ej. http://localhost:11434 (vacío = desactivado)
     OLLAMA_MODEL: str = "llama3.1"
-    LLM_PROVIDERS: str = "gemini,groq,ollama"   # orden del plan B
+    LLM_PROVIDERS: str = "gemini,gemini_lite,groq,ollama"   # orden del plan B
     CHAT_HISTORY_TURNS: int = 10       # mensajes previos que recuerda el chatbot
     EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
@@ -23,7 +26,7 @@ class Settings(BaseSettings):
     INDEXER_CRON_MINUTES: int = 5
     CONFIDENCE_THRESHOLD: float = 0.85
     # Módulo de visión
-    VISION_PROVIDERS: str = "gemini,groq,ollama"
+    VISION_PROVIDERS: str = "gemini,gemini_lite,groq,ollama"
     GROQ_VISION_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     OLLAMA_VISION_MODEL: str = "llama3.2-vision"
     # local: solo modelos locales | anonimizado: se tapan datos personales antes de enviar

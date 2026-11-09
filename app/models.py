@@ -3,6 +3,8 @@ from sqlalchemy import Boolean, Column, Integer, String, Text, Float, BigInteger
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
+from app.core.config import settings
 from app.core.db import Base
 
 class Usuario(Base):
@@ -51,8 +53,9 @@ class Chunk(Base):
     documento_id = Column(UUID(as_uuid=True), ForeignKey("documentos.id", ondelete="CASCADE"), nullable=False)
     pagina = Column(Integer)
     contenido = Column(Text, nullable=False)
-    embedding = Column(JSON)   # vector(768) en prod; JSON para portabilidad en tests
-    meta = Column(JSON)
+    # vector(768) de pgvector en Postgres; JSON en SQLite (desarrollo y pruebas)
+    embedding = Column(JSON().with_variant(Vector(settings.EMBEDDING_DIM), "postgresql"))
+    meta = Column("metadata", JSON)   # en la BD se llama "metadata" (nombre reservado en SQLAlchemy)
 
 class Factura(Base):
     __tablename__ = "facturas"

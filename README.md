@@ -97,8 +97,15 @@ La matriz está en `app/core/security.py` (`PERMISOS`). El usuario se consulta e
 - Auditoría de administración: `crear_usuario`, `editar_usuario`, `atender_alerta` (consulta en `GET /api/admin/auditoria`).
 - **Base de datos existente:** ejecutar `migrations/004_integracion_roles.sql` (convierte el rol heredado `usuario` en `operador`).
 
-## Despliegue
-Dockerfile incluido. En Render: Web Service (Docker); el scheduler interno ejecuta la indexación. Si el servicio se duerme, un Cron Job puede llamar a `/api/admin/run-indexer` con `X-Cron-Token`. Supabase para DB + Storage.
+## Despliegue (Fase 6)
+**Render** (Docker con Tesseract, plan gratuito) + **Supabase** (PostgreSQL + pgvector y Storage privado) + **GitHub Actions** como cron gratuito. Guía paso a paso, variables y checklist de verificación: [`docs/despliegue.md`](docs/despliegue.md).
+
+- `render.yaml`: blueprint del servicio (New + → Blueprint). Los secretos se piden al crearlo; `JWT_SECRET` y `CRON_SECRET` los genera Render.
+- Al arrancar, la app aplica `migrations/*.sql` pendientes (tabla `schema_migrations`, con candado para que no se apliquen dos veces) y crea el bucket privado.
+- `/health` verifica la base de datos y muestra los proveedores de IA activos y el almacenamiento.
+- En producción la app no arranca sin Postgres, sin Supabase Storage o con secretos por defecto.
+- `docker compose up --build` levanta lo mismo en local (Postgres + pgvector + la app).
+- Las pruebas también corren contra PostgreSQL real: `TEST_DATABASE_URL=postgresql+psycopg://… pytest` (borra esa base: use una solo para pruebas).
 
 ## Pruebas (Fase 5)
 ```bash

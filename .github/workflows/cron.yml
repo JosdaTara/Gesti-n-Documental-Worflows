@@ -1,0 +1,31 @@
+# Cron gratuito: el plan free de Render duerme el servicio tras 15 min sin tráfico y con él
+# se detiene el scheduler interno. Esta tarea lo despierta y dispara los barridos.
+# Configurar en GitHub → Settings → Secrets and variables → Actions:
+#   APP_URL      https://<servicio>.onrender.com
+#   CRON_SECRET  el mismo valor de CRON_SECRET que muestra Render (Environment)
+name: Barridos programados
+
+on:
+  schedule:
+    - cron: "*/14 11-23 * * 1-6"   # cada 14 min, lunes a sábado, 6:00 a 18:59 hora Colombia (UTC-5)
+  workflow_dispatch: {}             # también se puede lanzar a mano desde la pestaña Actions
+
+jobs:
+  barridos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ vars.CRON_ACTIVO != 'false' }}
+    steps:
+      - name: Despertar el servicio
+        run: |
+          for i in 1 2 3 4 5 6; do
+            curl -fsS --max-time 60 "${{ secrets.APP_URL }}/health" && exit 0
+            echo "Arrancando (intento $i)..."; sleep 20
+          done
+          exit 1
+      - name: Indexar documentos pendientes
+        run: |
+          curl -fsS --max-time 240 -X POST -H "X-Cron-Token: ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/admin/run-indexer"
+      - name: Procesar facturas pendientes
+        run: |
+          curl -fsS --max-time 120 -X POST -H "X-Cron-Token: ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/admin/run-invoices"

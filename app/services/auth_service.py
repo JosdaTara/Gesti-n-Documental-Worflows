@@ -57,5 +57,9 @@ def validar_configuracion_produccion():
         problemas.append("ADMIN_PASSWORD debe tener al menos 10 caracteres")
     if "*" in settings.ALLOWED_ORIGINS:
         problemas.append("ALLOWED_ORIGINS no puede ser '*' en producción")
+    if not settings.DATABASE_URL.startswith("postgresql"):
+        problemas.append("DATABASE_URL debe apuntar a PostgreSQL (Supabase); SQLite se borra en cada despliegue")
+    if not (settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY):
+        problemas.append("faltan SUPABASE_URL y SUPABASE_SERVICE_KEY: el disco del servidor no es permanente")
     if problemas:
         raise RuntimeError("Configuración insegura para producción: " + "; ".join(problemas))

@@ -158,3 +158,16 @@ def test_historial_del_chat_por_usuario(db, usuario, monkeypatch):
     msgs = client.get("/api/chat/historial?sesion=h1", headers=h).json()["mensajes"]
     assert [m["rol"] for m in msgs] == ["user", "assistant"] and msgs[1]["proveedor"] == "groq"
     assert client.delete("/api/chat/historial?sesion=h1", headers=h).json()["borrados"] == 2
+
+
+def test_gemini_lite_es_el_segundo_eslabon_con_la_misma_clave(monkeypatch):
+    monkeypatch.setattr(llm.settings, "GEMINI_API_KEY", "k")
+    monkeypatch.setattr(llm.settings, "GROQ_API_KEY", "")
+    monkeypatch.setattr(llm.settings, "OLLAMA_BASE_URL", "")
+    monkeypatch.setattr(llm.settings, "LLM_PROVIDERS", "gemini,gemini_lite,groq,ollama")
+    monkeypatch.setattr(llm.settings, "GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+    assert llm.proveedores_configurados() == ["gemini", "gemini_lite"]
+    assert llm.nombre_modelo("gemini_lite") == "gemini-3.5-flash-lite"
+    assert type(llm.crear_modelo("gemini_lite")).__name__ == "ChatGoogleGenerativeAI"
+    monkeypatch.setattr(llm.settings, "GEMINI_FALLBACK_MODEL", "")
+    assert llm.proveedores_configurados() == ["gemini"]

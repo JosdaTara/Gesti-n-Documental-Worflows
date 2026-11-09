@@ -1,0 +1,49 @@
+# Blueprint de Render: crea el servicio web desde este repositorio (plan gratuito).
+# En Render: New + → Blueprint → elegir el repositorio. Las variables con `sync: false`
+# las pide Render al crear el servicio (son secretos: no se escriben aquí).
+services:
+  - type: web
+    name: gestion-documental-ia
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      # Supabase → Project Settings → Database → Connection string → "Transaction pooler" (puerto 6543).
+      # Cambie el prefijo postgresql:// por postgresql+psycopg://
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: documentos
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_FALLBACK_MODEL     # segundo eslabón con la misma clave (más liviano)
+        value: gemini-3.5-flash-lite
+      - key: GROQ_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true          # Render genera un valor aleatorio largo
+      - key: CRON_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      # https://<nombre-del-servicio>.onrender.com (sin barra final)
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: VISION_PRIVACY_MODE
+        value: anonimizado           # Tesseract viene en la imagen Docker
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: INDEXER_CRON_MINUTES
+        value: "5"

@@ -65,7 +65,7 @@ def test_reintentar_reindexa_y_reporta_el_estado(db, monkeypatch):
     r = client.post("/api/documents", headers=h, data={"repo": "General"},
                     files={"file": ("informe.txt", b"Informe trimestral de ventas", "text/plain")})
     doc_id = r.json()["id"]
-    monkeypatch.setattr(indexing_service, "_embed", lambda chunks: [[0.1] for _ in chunks])
+    monkeypatch.setattr(indexing_service, "_embed", lambda chunks: [[0.1] * 768 for _ in chunks])
     monkeypatch.setattr(indexing_service, "_llm_json", lambda p: {"categoria": "Informe", "resumen": "Ventas T3"})
     r = client.post(f"/api/documents/{doc_id}/retry", headers=h)
     assert r.json() == {"ok": True, "estado": "procesado", "detalle": ""}

@@ -5,7 +5,7 @@ La guía pide pruebas unitarias de los servicios de automatización, pruebas del
 ## 1. Pruebas automatizadas (pytest)
 
 ```bash
-pytest -q                                   # 92 pruebas
+pytest -q                                   # 103 pruebas (99 en SQLite + 4 solo para PostgreSQL)
 pytest -q --cov=app --cov=scripts           # con cobertura
 ```
 
@@ -86,3 +86,30 @@ Compara lo que leyó la IA (`datos_ia`) con lo que cada usuario confirmó al rev
 > Pendiente: ejecutar con las 20 fotos reales del grupo y pegar aquí la tabla de `reporte.md`.
 
 Verificación de integración (no cuenta como evaluación): una factura **ficticia** generada por computador, procesada con Gemini real (`gemini-3.8-flash`). Leyó bien los 4 campos (proveedor, NIT, fecha y total de $65.450, que incluye IVA), con confianza 1,0 y en 11,9 s, y quedó validada automáticamente.
+
+## 4. Pruebas contra PostgreSQL + pgvector (Fase 6)
+
+SQLite no detecta diferencias con la base de producción, así que la suite completa también se corre contra PostgreSQL 16 + pgvector (la misma que usa Supabase), en un contenedor:
+
+```bash
+docker run -d --name gd-pg-test -e POSTGRES_PASSWORD=pruebas -e POSTGRES_DB=gd_test -p 55432:5432 pgvector/pgvector:pg16
+TEST_DATABASE_URL=postgresql+psycopg://postgres:pruebas@localhost:55432/gd_test pytest -q    # 103 passed
+```
+
+`tests/test_postgres.py` agrega pruebas que solo existen ahí: migraciones aplicadas e idempotentes, columna `vector(768)`, índice HNSW, búsqueda vectorial real con `<=>` y totales `NUMERIC`.
+
+**Errores reales que encontró esta prueba (y que SQLite no mostraba):**
+
+| Error | Efecto en producción | Corrección |
+|---|---|---|
+| El modelo llamaba `meta` a la columna que en la BD se llama `metadata` | Fallaba la indexación de **todos** los documentos | Atributo `meta` mapeado a la columna `metadata` |
+| Índice `ivfflat` creado sobre la tabla vacía (lists=100, probes=1) | La búsqueda devolvía vacío para preguntas válidas | Migración `005`: índice HNSW |
+| El ejecutor de migraciones abría la transacción dos veces | La app no arrancaba sobre Postgres | Una transacción por migración |
+
+**Prueba de punta a punta del contenedor de producción** (misma imagen Docker que Render, contra PostgreSQL, con Gemini y Tesseract reales):
+- Las 5 migraciones se aplicaron solas sobre la base vacía; al reiniciar no se repitieron. Memoria: 106 MB en reposo y 152 MB en uso (el límite gratuito de Render es 512 MB).
+- Factura ficticia con datos personales ficticios: Tesseract tapó cédula, teléfono y correo. El NIT y los montos quedaron legibles, Gemini leyó los 4 campos y el flujo de compras abrió la alerta de proveedor nuevo.
+  - Hallazgo: el OCR leía la "@" como "lO" o "(O" y **el correo se filtraba**. Se amplió el patrón y se agregaron pruebas de regresión.
+  - Limitación conocida: el nombre de la persona no se oculta (requeriría un modelo de reconocimiento de entidades).
+- Gemini `gemini-3.8-flash` respondió 503 *"high demand"* y 504 durante la prueba. Con el plan B, la clasificación y el chatbot respondieron con `gemini-3.5-flash-lite`: el chatbot contestó citando `politica_vacaciones.txt` en 13,5 s.
+  - Si ni siquiera clasificar es posible, el documento igual queda buscable (degradación controlada).

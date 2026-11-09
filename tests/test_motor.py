@@ -113,7 +113,7 @@ def test_agota_reintentos_y_propaga():
 # --- WF1: indexación ---------------------------------------------------------
 
 def test_indexar_documento_ok(db, monkeypatch):
-    monkeypatch.setattr(indexing_service, "_embed", lambda chunks: [[0.0] * 3 for _ in chunks])
+    monkeypatch.setattr(indexing_service, "_embed", lambda chunks: [[0.0] * 768 for _ in chunks])
     monkeypatch.setattr(indexing_service, "_llm_json",
                         lambda p: {"categoria": "Informe", "resumen": "r", "datos": {}})
     d = _doc_pendiente(db)
@@ -144,7 +144,7 @@ def test_barrido_cuenta_procesados_y_errores(db, monkeypatch):
     def embed(chunks):
         if "falla" in chunks[0]:
             raise ConnectionError("x")
-        return [[0.0] for _ in chunks]
+        return [[0.0] * 768 for _ in chunks]
     monkeypatch.setattr(indexing_service, "_embed", embed)
     _doc_pendiente(db, contenido=b"bien")
     _doc_pendiente(db, contenido=b"falla")
@@ -200,3 +200,18 @@ def test_no_reintenta_errores_permanentes_de_la_api():
         with pytest.raises(ErrorApi):
             llamar()
         assert llamadas["n"] == esperado, codigo
+
+
+def test_si_la_ia_no_clasifica_el_documento_queda_buscable(db, monkeypatch):
+    """Visto en producción simulada: Gemini respondía 503 "high demand". Los embeddings sí
+    funcionaban, así que el documento debe quedar indexado aunque falte la clasificación."""
+    from app.services import llm
+
+    def sin_ia(prompt):
+        raise llm.LLMNoDisponible("high demand")
+    monkeypatch.setattr(indexing_service, "_embed", lambda chunks: [[0.0] * 768 for _ in chunks])
+    monkeypatch.setattr(indexing_service, "_llm_json", sin_ia)
+    d = _doc_pendiente(db, contenido=b"documento importante")
+    indexing_service.index_one(db, str(d.id), "test")
+    db.refresh(d)
+    assert d.estado == "procesado" and d.categoria == "" and "pendiente" in d.detalle

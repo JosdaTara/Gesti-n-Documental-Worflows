@@ -62,7 +62,14 @@ def index_one(db: Session, doc_id: str, disparador: str = "scheduler") -> dict:
                 for c, v in zip(chunks, vecs):
                     db.add(Chunk(documento_id=d.id, contenido=c, embedding=v,
                                  meta={"archivo": d.nombre}))
-            cls = _classify(text)
+            try:
+                cls = _classify(text)
+            except llm.LLMNoDisponible as e:
+                # Degradación controlada: los embeddings ya están, así que el documento queda
+                # buscable; solo la clasificación (categoría y resumen) queda pendiente.
+                cls = {"categoria": "", "resumen": "", "datos": {},
+                       "detalle": "Indexado para búsqueda; la clasificación con IA quedó pendiente "
+                                  f"({str(e)[:120]}). Use Reintentar más tarde."}
             d.categoria = cls["categoria"]; d.resumen = cls["resumen"]
             d.datos = cls["datos"]; d.detalle = cls["detalle"]; d.estado = "procesado"
             db.commit()

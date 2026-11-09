@@ -46,6 +46,7 @@ LOCALES = {"ollama"}   # proveedores que no envían datos fuera del servidor
 def proveedores_configurados(orden_csv: str | None = None) -> list[str]:
     disponibles = {
         "gemini": bool(settings.GEMINI_API_KEY),
+        "gemini_lite": bool(settings.GEMINI_API_KEY and settings.GEMINI_FALLBACK_MODEL),
         "groq": bool(settings.GROQ_API_KEY),
         "ollama": bool(settings.OLLAMA_BASE_URL),
     }
@@ -55,19 +56,21 @@ def proveedores_configurados(orden_csv: str | None = None) -> list[str]:
 
 def nombre_modelo(proveedor: str, vision: bool = False) -> str:
     if vision:
-        return {"gemini": settings.GEMINI_MODEL, "groq": settings.GROQ_VISION_MODEL,
+        return {"gemini": settings.GEMINI_MODEL, "gemini_lite": settings.GEMINI_FALLBACK_MODEL,
+                "groq": settings.GROQ_VISION_MODEL,
                 "ollama": settings.OLLAMA_VISION_MODEL}.get(proveedor, "?")
-    return {"gemini": settings.GEMINI_MODEL, "groq": settings.GROQ_MODEL,
+    return {"gemini": settings.GEMINI_MODEL, "gemini_lite": settings.GEMINI_FALLBACK_MODEL,
+            "groq": settings.GROQ_MODEL,
             "ollama": settings.OLLAMA_MODEL}.get(proveedor, "?")
 
 
 def crear_modelo(proveedor: str, temperatura: float = 0.2, vision: bool = False):
     """Devuelve un chat model de LangChain para el proveedor indicado."""
     modelo = nombre_modelo(proveedor, vision)
-    if proveedor == "gemini":
+    if proveedor in ("gemini", "gemini_lite"):
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(model=modelo, google_api_key=settings.GEMINI_API_KEY,
-                                      temperature=temperatura, max_retries=1, timeout=90)
+                                      temperature=temperatura, max_retries=1, timeout=45)
     if proveedor == "groq":
         from langchain_groq import ChatGroq
         return ChatGroq(model=modelo, api_key=settings.GROQ_API_KEY,
