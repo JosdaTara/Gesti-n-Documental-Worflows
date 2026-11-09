@@ -19,7 +19,16 @@ async def lifespan(_: FastAPI):
     from app.workers import scheduler
     validar_configuracion_produccion()
     from app.core import migraciones
-    migraciones.aplicar(engine)          # Postgres: aplica migrations/*.sql pendientes
+    try:
+        migraciones.aplicar(engine)      # Postgres: aplica migrations/*.sql pendientes
+    except Exception as e:
+        host = engine.url.host or "?"
+        logging.getLogger("motor").error(
+            "No se pudo conectar a la base de datos (host %s, puerto %s): %s. Revise DATABASE_URL: en Supabase "
+            "use Connect → 'Transaction pooler' (puerto 6543, host *.pooler.supabase.com), con el prefijo "
+            "postgresql+psycopg:// y la contraseña correcta. La conexión directa db.*.supabase.co es solo IPv6 "
+            "y no funciona desde Render.", host, engine.url.port, type(e).__name__)
+        raise
     Base.metadata.create_all(bind=engine)  # SQLite: crea las tablas; en Postgres no toca las existentes
     from app.services import storage
     storage.asegurar_bucket()
