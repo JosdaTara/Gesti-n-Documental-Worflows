@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException
@@ -25,8 +26,9 @@ def login(db: Session, usuario: str, clave: str, ip: str | None = None):
         if u.activo is False:
             raise HTTPException(status_code=403, detail="El usuario está desactivado. Contacte al administrador.")
         rol = normalizar_rol(u.rol)
-        token = create_token(u.id, u.usuario, rol)
-        s = Sesion(usuario_id=u.id, token_jti=token[-32:],
+        jti = uuid.uuid4().hex
+        token = create_token(u.id, u.usuario, rol, jti)
+        s = Sesion(usuario_id=u.id, token_jti=jti,
                    expira=datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES))
         db.add(s); db.commit()
         return {"token": token, "nombre": u.usuario, "rol": rol}

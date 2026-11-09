@@ -18,9 +18,13 @@ def verify_password(pw: str, hashed: str) -> bool:
     except Exception:
         return False
 
-def create_token(usuario_id: int, usuario: str, rol: str) -> str:
+def create_token(usuario_id: int, usuario: str, rol: str, jti: str | None = None) -> str:
+    # jti aleatorio: dos inicios de sesión en el mismo segundo producían el mismo token y
+    # chocaban con la restricción UNIQUE de sesiones.token_jti (error 500 con doble clic).
+    import uuid
     exp = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    return jwt.encode({"sub": str(usuario_id), "usuario": usuario, "rol": rol, "exp": exp},
+    return jwt.encode({"sub": str(usuario_id), "usuario": usuario, "rol": rol, "exp": exp,
+                       "jti": jti or uuid.uuid4().hex},
                       settings.JWT_SECRET, algorithm="HS256")
 
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer),
