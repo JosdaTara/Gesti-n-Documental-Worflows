@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import require_permiso
@@ -14,7 +15,10 @@ async def procesar_factura(file: UploadFile = File(...), consentimiento: bool = 
                            db: Session = Depends(get_db), u=Depends(require_permiso("subir_imagenes"))):
     """Sube una foto o PDF de factura y devuelve los datos extraídos con su confianza."""
     data = await file.read()
-    return vs.process_invoice(db, data, file.content_type or "", u["id"], consentimiento, canal="web")
+    # El procesamiento tarda de 10 a 60 s (Gemini, Tesseract): se ejecuta en un hilo aparte para
+    # no bloquear el servidor. Si se bloquea, el health check de Render falla y mata la instancia.
+    return await run_in_threadpool(vs.process_invoice, db, data, file.content_type or "", u["id"],
+                                   consentimiento, canal="web")
 
 
 @router.get("/invoices", response_model=list[FacturaOut])

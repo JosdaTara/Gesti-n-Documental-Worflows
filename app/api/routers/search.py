@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from app.core.db import get_db
 from app.core.security import require_permiso
 from app.schemas import BuscarIn, BuscarOut, ConsultarIn, ConsultarOut
@@ -29,7 +30,9 @@ def chat(body: ConsultarIn, db: Session = Depends(get_db), u=Depends(require_per
 async def chat_imagen(file: UploadFile = File(...), sesion: str = Form("general"), consentimiento: bool = Form(False),
                       db: Session = Depends(get_db), u=Depends(require_permiso("subir_imagenes"))):
     """Canal chatbot del módulo de visión: recibe la foto de una factura por el chat."""
-    return chatbot.recibir_imagen(db, u, await file.read(), file.content_type or "", sesion, consentimiento)
+    data = await file.read()
+    # Igual que en /api/vision/invoices: el trabajo lento va en un hilo para no bloquear el servidor.
+    return await run_in_threadpool(chatbot.recibir_imagen, db, u, data, file.content_type or "", sesion, consentimiento)
 
 
 @router.get("/chat/historial")
